@@ -9,6 +9,7 @@ import { OrganizationSchema, WebApplicationSchema } from '@/components/seo/Struc
 import { ResourceHints } from '@/components/seo/ResourceHints';
 import { StorageInitializer } from '@/components/common/StorageInitializer';
 import type { Metadata } from 'next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 export const metadata: Metadata = defaultMetadata;
 
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <Toaster position="top-right" richColors />
           </ErrorBoundaryWrapper>
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>
