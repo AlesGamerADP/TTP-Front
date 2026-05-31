@@ -4,6 +4,7 @@ import {
   type ComponentStatus, 
 } from './auth';
 import { logger } from './logger';
+import { enrichCompaniesCatalogFromRecords } from '@/features/companies/catalog';
 import { mapBackendComponent } from '@/features/components/mappers';
 
 export interface PaginationParams {
@@ -60,6 +61,7 @@ export async function getComponentsPaginated(
       quotationNumber: params.quotationNumber,
     });
 
+    enrichCompaniesCatalogFromRecords(response.data);
     const mappedData = response.data.map(mapBackendComponent);
     const pagination = response.pagination;
 
@@ -161,7 +163,8 @@ export async function searchComponents(
       search: query,
       limit,
     });
-    
+
+    enrichCompaniesCatalogFromRecords(response.data);
     return response.data.map(mapBackendComponent);
   } catch (error) {
     logger.error('Error searching components', { error });

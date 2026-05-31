@@ -377,7 +377,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                                 {isFirst && (
                                   <Badge
                                     variant="outline"
-                                    className="event-meta-badge font-normal rounded-sm px-2.5 py-1"
+                                    className="event-meta-badge font-normal rounded-sm py-1"
                                   >
                                     Más reciente
                                   </Badge>

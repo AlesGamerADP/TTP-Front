@@ -44,7 +44,7 @@ import { getComponentStatusBadgeClass } from '../../lib/component-status-style';
 import { getRoleLabel, shouldShowRoleBadge } from '../../lib/user-display';
 import { useIsMobile } from '../ui/use-mobile';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
-import { getCompanyNameFromCatalog } from '@/features/companies/catalog';
+import { getCompanyNameFromCatalog, resolveComponentCompanyName } from '@/features/companies/catalog';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
@@ -208,6 +208,11 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
     document.head.appendChild(link);
   }, []);
 
+  const resolveCompanyLabel = useCallback(
+    (component: Component) => resolveComponentCompanyName(component, companies),
+    [companies],
+  );
+
   const renderComponentListItem = useCallback((component: Component, options?: { showCompany?: boolean }) => {
     const showCompany = options?.showCompany ?? false;
 
@@ -230,7 +235,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
                 <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="break-words">
-                  {component.company_id ? getCompanyNameFromCatalog(component.company_id) : 'Sin asignar'}
+                  {resolveCompanyLabel(component)}
                 </span>
               </div>
             )}
@@ -286,7 +291,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
               <div className="flex items-center text-sm">
                 <Building2 className="mr-1 h-4 w-4 text-muted-foreground" />
                 <span className="truncate">
-                  {component.company_id ? getCompanyNameFromCatalog(component.company_id) : 'Sin asignar'}
+                  {resolveCompanyLabel(component)}
                 </span>
               </div>
             </div>
@@ -318,7 +323,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
         </div>
       </div>
     );
-  }, [isMobileViewport, onComponentSelect, prefetchComponentDetail]);
+  }, [isMobileViewport, onComponentSelect, prefetchComponentDetail, resolveCompanyLabel]);
 
   const componentsByCompany = useMemo(() => {
     if (!components?.data) return {};
@@ -629,7 +634,9 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
                                 <Building2 />
                               </div>
                               <div>
-                                <CardTitle className="text-lg">{getCompanyNameFromCatalog(companyId)}</CardTitle>
+                                <CardTitle className="text-lg">
+                                  {getCompanyNameFromCatalog(companyId, { companies })}
+                                </CardTitle>
                                 <p className="text-sm text-muted-foreground">
                                   {stats.total} componentes totales • {stats.inProgress} en proceso
                                 </p>

@@ -3565,6 +3565,7 @@ html {
   border-color: var(--border);
   background: var(--muted);
   color: var(--muted-foreground);
+  padding-inline: 1rem;
 }
 
 .timeline-status-panel {
