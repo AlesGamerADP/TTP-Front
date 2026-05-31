@@ -368,7 +368,7 @@ export function TimelineManager({
               onWheelCapture={(event) => event.stopPropagation()}
             >
               <div
-                className={cn('flex flex-col', isMobile && 'min-w-0 w-full')}
+                className={cn('flex min-w-0 flex-col', isMobile && 'w-full')}
                 style={{ minHeight: 0, height: '100%' }}
               >
               <button
@@ -390,7 +390,10 @@ export function TimelineManager({
               </DialogHeader>
               
               <div
-                className={isMobile ? 'space-y-4 px-4 py-3 min-w-0 w-full' : 'space-y-4 pl-4 pr-7 py-3'}
+                className={cn(
+                  'min-w-0 space-y-4 py-3',
+                  isMobile ? 'w-full px-4' : 'pl-4 pr-7',
+                )}
                 style={
                   isMobile
                     ? {
@@ -404,6 +407,7 @@ export function TimelineManager({
                         flex: '1 1 auto',
                         minHeight: 0,
                         overflowY: 'scroll',
+                        overflowX: 'hidden',
                         overscrollBehavior: 'contain',
                         scrollbarGutter: 'stable',
                         marginRight: '-0.75rem',
@@ -455,15 +459,18 @@ export function TimelineManager({
                 </div>
 
                 {/* Event Note */}
-                <div className={isMobile ? 'space-y-2' : 'space-y-2 pr-4'}>
+                <div className={cn('min-w-0 space-y-2', !isMobile && 'pr-4')}>
                   <Label>Nota del Evento (Opcional)</Label>
                   <Textarea
                     placeholder="Describa los detalles de este evento..."
                     value={eventNote}
                     onChange={(e) => setEventNote(e.target.value)}
                     rows={3}
-                    className={`resize-none ${emphasizedFieldClassName}`}
-                    style={emphasizedFieldStyle}
+                    className={cn(
+                      'event-note-text max-w-full min-w-0 resize-none',
+                      emphasizedFieldClassName,
+                    )}
+                    style={{ ...emphasizedFieldStyle, fieldSizing: 'fixed' }}
                   />
                 </div>
 
@@ -703,19 +710,21 @@ export function TimelineManager({
             ) : (
               <div className="space-y-3">
                 {visibleRecentEvents.map((event) => (
-                  <div key={event.id} className="p-3 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge variant="outline">{STATUS_LABELS[event.estado]}</Badge>
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3 mr-1" />
+                  <div key={event.id} className="min-w-0 overflow-hidden rounded-lg border p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <Badge variant="outline" className="max-w-full whitespace-normal">
+                        {STATUS_LABELS[event.estado]}
+                      </Badge>
+                      <div className="flex shrink-0 items-center text-xs text-muted-foreground">
+                        <Calendar className="mr-1 h-3 w-3 shrink-0" />
                         {new Date(event.created_at).toLocaleDateString('es-ES')}
                       </div>
                     </div>
                     {event.nota && (
-                      <p className="text-sm text-muted-foreground mb-2">{event.nota}</p>
+                      <p className="event-note-text mb-2 text-sm text-muted-foreground">{event.nota}</p>
                     )}
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center">
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <div className="min-w-0 break-words">
                         {getUserDisplayName(event.created_by)}
                       </div>
                       <div className="flex items-center space-x-3">
