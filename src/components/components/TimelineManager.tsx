@@ -37,16 +37,18 @@ import {
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useUsersCatalog } from '@/features/users/hooks/useUsersCatalog';
 import type { ComponentDocumentRecord } from '@/features/components/hooks/useComponentDetailData';
-import { submitTimelineUpdate } from '@/features/components/use-cases/submitTimelineUpdate';
 import { compressImageForUpload } from '@/lib/compress-image';
+
+import type { TimelineSubmitInput } from '@/features/components/hooks/useComponentDetailActions';
 
 interface TimelineManagerProps {
   componentId: string;
   currentUser: User;
   events: ComponentEvent[];
   documents?: ComponentDocumentRecord[];
-  onSaved: () => Promise<void> | void;
+  onSubmitTimeline: (input: TimelineSubmitInput) => Promise<void>;
   currentStatus: ComponentStatus;
+  uploadInProgress?: boolean;
 }
 
 export function TimelineManager({ 
@@ -54,8 +56,9 @@ export function TimelineManager({
   currentUser,
   events, 
   documents = [],
-  onSaved,
+  onSubmitTimeline,
   currentStatus,
+  uploadInProgress = false,
 }: TimelineManagerProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
@@ -263,29 +266,18 @@ export function TimelineManager({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      logger.debug('Iniciando actualización de estado', {
-        componentId,
-        currentStatus,
-        newStatus: selectedStatus,
-        hasNote: !!eventNote,
-        photosCount: eventPhotos.length,
-        filesCount: eventFiles.length
-      });
-      await submitTimelineUpdate({
-        componentId,
-        selectedStatus,
-        eventNote,
-        eventPhotos,
-        eventFiles,
-        createdBy: currentUser.id,
-        onSaved,
-      });
+    const hasAttachments = eventPhotos.length > 0 || eventFiles.length > 0;
+    const payload: TimelineSubmitInput = {
+      tempId: `pending-${Date.now()}`,
+      selectedStatus,
+      eventNote,
+      eventPhotos: [...eventPhotos],
+      eventFiles: [...eventFiles],
+      createdBy: currentUser.id,
+      photoPreviewUrls: [...photoPreviewUrls],
+    };
 
-      logger.debug('Estado actualizado exitosamente', { componentId, newStatus: selectedStatus });
-
-      // Reset form
+    const resetForm = () => {
       setEventNote('');
       setEventPhotos([]);
       setPhotoPreviewUrls([]);
@@ -298,16 +290,23 @@ export function TimelineManager({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-      setSelectedStatus(selectedStatus); // Mantener el nuevo estado seleccionado
+      setSelectedStatus(selectedStatus);
+    };
+
+    if (!hasAttachments) {
+      resetForm();
       setIsDialogOpen(false);
-    } catch (error: unknown) {
-      logger.error('Error al actualizar estado', {
-        errorMessage: error instanceof Error ? error.message : undefined,
-        errorName: error instanceof Error ? error.name : undefined,
-        componentId,
-        selectedStatus,
-      });
-      // El error ya se maneja en onSaved con toast
+      void onSubmitTimeline(payload).catch(() => undefined);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onSubmitTimeline(payload);
+      resetForm();
+      setIsDialogOpen(false);
+    } catch {
+      // El toast de error ya se muestra en useComponentDetailActions
     } finally {
       setIsSubmitting(false);
     }
@@ -337,6 +336,9 @@ export function TimelineManager({
   };
 
   const handleDialogOpenChange = (open: boolean) => {
+    if (!open && isSubmitting) {
+      return;
+    }
     if (open && nextStatus) {
       setSelectedStatus(nextStatus);
     }
@@ -359,6 +361,7 @@ export function TimelineManager({
               <Button
                 size="sm"
                 className="timeline-update-button shrink-0"
+                disabled={uploadInProgress}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Actualizar Estado
@@ -667,17 +670,23 @@ export function TimelineManager({
                 <Button 
                   variant="outline" 
                   onClick={() => setIsDialogOpen(false)}
+                  disabled={isSubmitting}
                   className={isMobile ? 'w-full' : 'whitespace-nowrap'}
                 >
                   Cancelar
                 </Button>
+                {isSubmitting && (
+                  <p className="text-center text-xs text-muted-foreground sm:col-span-2">
+                    Subiendo archivos al servidor. No cierres esta ventana hasta que termine.
+                  </p>
+                )}
                 <Button 
                   onClick={handleSubmit}
-                  disabled={!canAddEvent || !canUpdateToStatus(currentStatus, selectedStatus) || isSubmitting}
+                  disabled={!canAddEvent || !canUpdateToStatus(currentStatus, selectedStatus) || isSubmitting || uploadInProgress}
                   className={isMobile ? 'w-full' : 'whitespace-nowrap'}
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  {isSubmitting ? 'Actualizando...' : 'Actualizar Estado'}
+                  {isSubmitting ? 'Subiendo archivos…' : 'Actualizar Estado'}
                 </Button>
                 </div>
               </div>

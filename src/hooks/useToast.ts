@@ -30,8 +30,11 @@ export function useToast() {
         duration: 2000,
       });
     },
-    loading: (message: string) => {
-      return sonnerToast.loading(message);
+    loading: (message: string, description?: string) => {
+      return sonnerToast.loading(message, { description });
+    },
+    dismiss: (toastId?: string | number) => {
+      sonnerToast.dismiss(toastId);
     },
     promise: <T,>(
       promise: Promise<T>,

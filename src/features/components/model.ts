@@ -34,6 +34,8 @@ export interface ComponentEvent {
   archivos: string[];
   created_by: string;
   created_at: string;
+  /** Evento mostrado antes de confirmar subida al servidor */
+  pending?: boolean;
 }
 
 export const STATUS_LABELS: Record<ComponentStatus, string> = {

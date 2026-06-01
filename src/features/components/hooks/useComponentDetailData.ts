@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import type { Component, ComponentEvent } from '@/features/components/model';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Component, ComponentEvent, ComponentStatus } from '@/features/components/model';
 import { componentsApi } from '@/lib/api';
 import {
   mapComponentDetailFromApi,
@@ -14,12 +14,27 @@ import { useComponentRealtime } from '@/features/components/realtime/useComponen
 
 export type { ComponentDocumentRecord };
 
+export interface OptimisticTimelinePayload {
+  tempId: string;
+  status: ComponentStatus;
+  note?: string;
+  photoPreviewUrls: string[];
+  fileNames: string[];
+  createdBy: string;
+}
+
+type DetailSnapshot = {
+  component: Component | undefined;
+  events: ComponentEvent[];
+};
+
 export function useComponentDetailData(componentId: string) {
   const [component, setComponent] = useState<Component | undefined>(undefined);
   const [events, setEvents] = useState<ComponentEvent[]>([]);
   const [documents, setDocuments] = useState<ComponentDocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
+  const optimisticSnapshotRef = useRef<DetailSnapshot | null>(null);
 
   const reload = useCallback(
     async (silent = false) => {
@@ -44,6 +59,7 @@ export function useComponentDetailData(componentId: string) {
 
         setEvents(detail.events);
         setDocuments(detail.documents);
+        optimisticSnapshotRef.current = null;
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -68,6 +84,42 @@ export function useComponentDetailData(componentId: string) {
     [componentId],
   );
 
+  const applyOptimisticTimelineUpdate = useCallback(
+    (payload: OptimisticTimelinePayload) => {
+      optimisticSnapshotRef.current = {
+        component: component ? { ...component } : undefined,
+        events: [...events],
+      };
+
+      const optimisticEvent: ComponentEvent = {
+        id: payload.tempId,
+        component_id: componentId,
+        estado: payload.status,
+        nota: payload.note,
+        fotos: payload.photoPreviewUrls,
+        archivos: payload.fileNames,
+        created_by: payload.createdBy,
+        created_at: new Date().toISOString(),
+        pending: true,
+      };
+
+      setComponent((prev) => (prev ? { ...prev, estado: payload.status } : prev));
+      setEvents((prev) => [optimisticEvent, ...prev]);
+    },
+    [component, componentId, events],
+  );
+
+  const rollbackOptimisticTimelineUpdate = useCallback((tempId: string) => {
+    const snapshot = optimisticSnapshotRef.current;
+    if (snapshot) {
+      setComponent(snapshot.component);
+      setEvents(snapshot.events);
+    } else {
+      setEvents((prev) => prev.filter((event) => event.id !== tempId));
+    }
+    optimisticSnapshotRef.current = null;
+  }, []);
+
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -88,5 +140,7 @@ export function useComponentDetailData(componentId: string) {
     isLoading,
     isLoadingDetails,
     reload,
+    applyOptimisticTimelineUpdate,
+    rollbackOptimisticTimelineUpdate,
   };
 }

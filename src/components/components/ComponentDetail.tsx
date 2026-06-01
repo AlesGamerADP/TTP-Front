@@ -151,6 +151,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     isLoading,
     isLoadingDetails,
     reload,
+    applyOptimisticTimelineUpdate,
+    rollbackOptimisticTimelineUpdate,
   } = useComponentDetailData(componentId);
 
   useEffect(() => {
@@ -276,9 +278,28 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
   const canDelete = access.canEditTimeline;
   const {
     handleDelete,
-    handleTimelineSaved,
+    submitTimelineUpdate,
+    isSavingTimeline,
     isDeleting,
-  } = useComponentDetailActions({ componentId, reload, onBack });
+  } = useComponentDetailActions({
+    componentId,
+    reload,
+    onBack,
+    applyOptimisticTimelineUpdate,
+    rollbackOptimisticTimelineUpdate,
+  });
+
+  useEffect(() => {
+    if (!isSavingTimeline) return;
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isSavingTimeline]);
 
   if (isLoading || !component) {
     return <ComponentDetailSkeleton />;
@@ -447,7 +468,15 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                                 <Badge className={getComponentStatusBadgeClass(event.estado)}>
                                   {STATUS_LABELS[event.estado]}
                                 </Badge>
-                                {isFirst && (
+                                {event.pending && (
+                                  <Badge
+                                    variant="outline"
+                                    className="event-meta-badge font-normal rounded-sm border-amber-500/40 text-amber-700 dark:text-amber-400"
+                                  >
+                                    Guardando…
+                                  </Badge>
+                                )}
+                                {isFirst && !event.pending && (
                                   <Badge
                                     variant="outline"
                                     className="event-meta-badge font-normal rounded-sm"
@@ -708,6 +737,16 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        {isSavingTimeline && (
+          <div
+            className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
+            role="status"
+            aria-live="polite"
+          >
+            Guardando fotos y documentos en el servidor. Espera a que termine: así cualquier usuario que
+            entre verá el mismo estado y los mismos archivos.
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
@@ -787,7 +826,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 events={events}
                 documents={documents}
                 currentStatus={component.estado}
-                onSaved={handleTimelineSaved}
+                onSubmitTimeline={submitTimelineUpdate}
+                uploadInProgress={isSavingTimeline}
               />
             )}
           </div>
