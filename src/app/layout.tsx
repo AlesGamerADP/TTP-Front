@@ -55,7 +55,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <Toaster position="top-right" richColors />
           </ErrorBoundaryWrapper>
-          <SpeedInsights />
+          <SpeedInsights
+            scriptSrc={
+              process.env.NODE_ENV === 'development'
+                ? '/vercel/speed-insights.debug.js'
+                : undefined
+            }
+          />
         </ThemeProvider>
       </body>
     </html>

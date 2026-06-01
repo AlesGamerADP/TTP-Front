@@ -342,16 +342,16 @@ export function TimelineManager({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center">
-            <Clock className="w-5 h-5 mr-2" />
+        <div className="flex w-full items-start justify-between gap-4">
+          <CardTitle className="flex min-w-0 flex-1 items-center leading-snug">
+            <Clock className="mr-2 h-5 w-5 shrink-0" />
             Gestión de Línea de Tiempo
           </CardTitle>
           <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className="timeline-update-button"
+                className="timeline-update-button shrink-0"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Actualizar Estado

@@ -3607,6 +3607,37 @@ html {
   background: var(--muted);
 }
 
+.preview-dialog-header {
+  position: relative;
+  z-index: 20;
+}
+
+.preview-dialog-close {
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+}
+
+.dark .preview-dialog-close {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+  border-color: #e4e4e7 !important;
+}
+
+.preview-dialog-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .preview-dialog-shell {
+    height: auto;
+    max-height: 95vh;
+  }
+}
+
 .progress-track {
   background: var(--muted);
 }

@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogContent, DialogFooter } from '../ui/dialog';
 import { ProgressTimeline } from './ProgressTimeline';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ComponentDetailShell } from './ComponentDetailShell';
+import { PreviewDialogHeader } from '../common/PreviewDialogHeader';
 import { Skeleton } from '../ui/skeleton';
 import { useIsMobile } from '../ui/use-mobile';
 import dynamic from 'next/dynamic';
@@ -36,7 +37,13 @@ import {
 import {
   type User,
 } from '../../lib/auth';
-import { componentsApi, API_BASE_URL } from '../../lib/api';
+import { componentsApi } from '../../lib/api';
+import {
+  fetchPhotoPreviewBlobUrl,
+  resolvePdfPreviewUrl,
+  resolvePhotoPreviewUrl,
+  revokeBlobUrlIfNeeded,
+} from '@/lib/media-fetch';
 import { getComponentStatusBadgeClass } from '../../lib/component-status-style';
 import { logger } from '../../lib/logger';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
@@ -70,8 +77,17 @@ function formatEventDateTime(dateStr: string): string {
 }
 
 function truncateFileName(name: string, maxLength = 28): string {
-  if (name.length <= maxLength) return name;
-  return `${name.slice(0, maxLength - 1)}…`;
+  const decoded = decodeFileName(name);
+  if (decoded.length <= maxLength) return decoded;
+  return `${decoded.slice(0, maxLength - 1)}…`;
+}
+
+function decodeFileName(name: string): string {
+  try {
+    return decodeURIComponent(name.replace(/\+/g, ' '));
+  } catch {
+    return name;
+  }
 }
 
 export const ComponentDetail = memo(function ComponentDetail({ componentId, currentUser, onBack }: ComponentDetailProps) {
@@ -98,6 +114,20 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
   const [previewDoc, setPreviewDoc] = useState<string | null>(null);
   const [previewDocName, setPreviewDocName] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  const closeImagePreview = () => {
+    previewImages.forEach((url) => revokeBlobUrlIfNeeded(url));
+    revokeBlobUrlIfNeeded(previewImage);
+    setPreviewImage(null);
+    setPreviewImages([]);
+    setPreviewIndex(0);
+  };
+
+  const closeDocPreview = () => {
+    revokeBlobUrlIfNeeded(previewDoc);
+    setPreviewDoc(null);
+    setPreviewDocName(null);
+  };
 
   const relatedDocsByEvent = useMemo(() => {
     const docsByEvent = new Map<string, ComponentDocumentRecord[]>();
@@ -204,11 +234,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
 
                 for (const photo of event.fotos) {
                   try {
-                    const photoPath = typeof photo === 'string' ? photo : photo;
-                    const url = componentsApi.getPhotoUrl(photoPath, { size: 'full' });
-                    const response = await fetch(url, { method: 'GET', credentials: 'include' });
-                    if (!response.ok) continue;
-                    photoUrls.push(URL.createObjectURL(await response.blob()));
+                    const photoPath = typeof photo === 'string' ? photo : String(photo);
+                    photoUrls.push(await resolvePhotoPreviewUrl(photoPath));
                   } catch (error: unknown) {
                     logger.error('Error cargando foto individual', {
                       photo,
@@ -222,7 +249,10 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   setPreviewImage(photoUrls[0]);
                   setPreviewIndex(0);
                 } else {
-                  toast.error('Error al cargar imágenes', 'No se pudieron cargar las fotos. Verifica tu conexión.');
+                  toast.error(
+                    'Error al cargar imágenes',
+                    'No se pudieron cargar las fotos. Comprueba la sesión o abre la app en Safari/Chrome.',
+                  );
                 }
               } catch (error: unknown) {
                 toast.error(
@@ -238,7 +268,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
         )}
 
         {relatedDocs.map((doc, idx) => {
-          const fileName = doc.file_name || `archivo-${idx + 1}`;
+          const fileName = decodeFileName(doc.file_name || `archivo-${idx + 1}`);
           const isPdf = fileName.toLowerCase().endsWith('.pdf');
 
           return (
@@ -253,13 +283,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 if (isPdf) {
                   setIsLoadingPreview(true);
                   try {
-                    const url = `${API_BASE_URL}/api/components/_docs/${doc.id}/download`;
-                    const response = await fetch(url, { method: 'GET', credentials: 'include' });
-                    if (!response.ok) {
-                      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                      throw new Error(errorData.error || `HTTP ${response.status}`);
-                    }
-                    setPreviewDoc(URL.createObjectURL(await response.blob()));
+                    const url = await resolvePdfPreviewUrl(doc.id);
+                    setPreviewDoc(url);
                     setPreviewDocName(fileName);
                   } catch (error: unknown) {
                     toast.error(
@@ -724,47 +749,21 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
 
       {/* Dialog para previsualizar imágenes */}
       {previewImage && (
-        <Dialog 
-          open={!!previewImage} 
+        <Dialog
+          open={!!previewImage}
           onOpenChange={(open) => {
-            if (!open) {
-              // Limpiar blob URLs al cerrar
-              previewImages.forEach(url => {
-                if (url && url.startsWith('blob:')) {
-                  try {
-                    URL.revokeObjectURL(url);
-                  } catch (error) {
-                    // Ignorar errores al revocar
-                  }
-                }
-              });
-              setPreviewImage(null);
-              setPreviewImages([]);
-              setPreviewIndex(0);
-            }
+            if (!open) closeImagePreview();
           }}
         >
           <DialogContent
-            className="w-[calc(100vw-2rem)] sm:w-[calc(100vw-3rem)] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-w-6xl h-[90vh] sm:h-[85vh] max-h-[95vh] overflow-hidden p-0 m-1 sm:m-2 flex flex-col [&>button]:z-[60] [&>button]:bg-background [&>button]:shadow-md"
-            style={
-              isMobileViewport
-                ? {
-                    width: 'calc(100vw - 1rem)',
-                    height: '94vh',
-                    maxHeight: '96vh',
-                    margin: '0.25rem',
-                  }
-                : undefined
-            }
+            hideCloseButton
+            className="preview-dialog-shell left-0 top-0 max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[90vh] sm:max-h-[95vh] sm:w-[min(96vw,72rem)] sm:max-w-6xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:border"
           >
-            <DialogHeader className="px-4 sm:px-5 md:px-6 pt-6 sm:pt-7 md:pt-8 pb-3 sm:pb-4 flex-shrink-0 border-b">
-              <DialogTitle className="text-sm sm:text-base md:text-lg font-semibold mb-1 mt-1">
-                Foto {previewIndex + 1} de {previewImages.length}
-              </DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm mt-0">
-                Visualización de imagen del evento
-              </DialogDescription>
-            </DialogHeader>
+            <PreviewDialogHeader
+              title={`Foto ${previewIndex + 1} de ${previewImages.length}`}
+              description="Visualización de imagen del evento"
+              onClose={closeImagePreview}
+            />
             <div className="preview-media-bg relative flex flex-1 items-center justify-center overflow-hidden" style={{ minHeight: 0 }}>
               {previewImages.length > 1 && (
                 <>
@@ -809,27 +808,32 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                         width: 'auto',
                         height: 'auto'
                       }}
-                      onError={(e) => {
-                        const errorInfo: Record<string, any> = {
-                          index: previewIndex,
-                          hasPreviewImage: !!previewImage,
-                          previewImageType: previewImage?.startsWith('blob:') ? 'blob' : 
-                                          previewImage?.startsWith('data:') ? 'data' : 'other',
-                        };
-                        
-                        if (previewImage) {
+                      onError={async () => {
+                        if (
+                          previewImage &&
+                          !previewImage.startsWith('blob:') &&
+                          previewImage.includes('/api/components/_photos/')
+                        ) {
                           try {
-                            if (previewImage.startsWith('blob:')) {
-                              errorInfo.previewImageLength = previewImage.length;
-                            } else {
-                              errorInfo.previewImagePreview = previewImage.substring(0, 50) + '...';
-                            }
-                          } catch {
-                            errorInfo.previewImage = 'N/A';
+                            const blobUrl = await fetchPhotoPreviewBlobUrl(previewImage);
+                            revokeBlobUrlIfNeeded(previewImage);
+                            setPreviewImage(blobUrl);
+                            setPreviewImages((prev) =>
+                              prev.map((u, i) => (i === previewIndex ? blobUrl : u)),
+                            );
+                            return;
+                          } catch (fallbackError) {
+                            logger.error('Fallback blob para foto falló', {
+                              error:
+                                fallbackError instanceof Error
+                                  ? fallbackError.message
+                                  : fallbackError,
+                            });
                           }
                         }
-                        
-                        logger.error('Error cargando imagen en preview', errorInfo);
+                        logger.error('Error cargando imagen en preview', {
+                          index: previewIndex,
+                        });
                         toast.error('Error al cargar imagen', 'No se pudo mostrar la imagen');
                       }}
                       onLoad={() => {
@@ -844,11 +848,21 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 )}
               </div>
             </div>
-            <DialogFooter className="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 pt-2 sm:pt-3 flex-shrink-0 border-t bg-background">
+            <DialogFooter className="flex shrink-0 flex-row gap-2 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:justify-end">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 sm:h-9 w-full sm:w-auto text-xs sm:text-sm"
+                className="h-10 flex-1 sm:flex-none sm:min-w-[8rem]"
+                onClick={closeImagePreview}
+              >
+                Cerrar
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className="h-10 flex-1 sm:flex-none sm:min-w-[8rem]"
                 onClick={() => {
                   const link = document.createElement('a');
                   link.href = previewImage || '';
@@ -859,9 +873,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   document.body.removeChild(link);
                 }}
               >
-                <Download className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Descargar Foto</span>
-                <span className="sm:hidden">Descargar</span>
+                <Download className="mr-2 h-4 w-4" />
+                Descargar
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -870,38 +883,22 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
 
       {/* Dialog para previsualizar documentos */}
       {previewDoc && (
-        <Dialog open={!!previewDoc} onOpenChange={() => {
-          // Limpiar blob URL al cerrar
-          if (previewDoc && previewDoc.startsWith('blob:')) {
-            try {
-              URL.revokeObjectURL(previewDoc);
-            } catch (error) {
-              // Ignorar errores al revocar
-            }
-          }
-          setPreviewDoc(null);
-          setPreviewDocName(null);
-        }}>
-          <DialogContent 
-            className="!w-[calc(100vw-1rem)] sm:!w-[calc(100vw-1.5rem)] md:!w-[calc(100vw-2rem)] lg:!w-[calc(100vw-2.5rem)] xl:!w-[calc(100vw-3rem)] !max-w-[calc(100vw-1rem)] h-[90vh] sm:h-[92vh] md:h-[95vh] max-h-[98vh] p-0 flex flex-col m-0 [&>button]:z-[60] [&>button]:bg-background [&>button]:shadow-md"
-            style={{ 
-              width: 'calc(100vw - 1rem)',
-              maxWidth: 'calc(100vw - 1rem)'
-            }}
+        <Dialog
+          open={!!previewDoc}
+          onOpenChange={(open) => {
+            if (!open) closeDocPreview();
+          }}
+        >
+          <DialogContent
+            hideCloseButton
+            className="preview-dialog-shell left-0 top-0 max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[90vh] sm:max-h-[95vh] sm:w-[min(96vw,72rem)] sm:max-w-6xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:border"
           >
-            <DialogHeader className="px-4 sm:px-6 md:px-8 pt-4 sm:pt-5 md:pt-6 pb-3 flex-shrink-0 border-b">
-              <DialogTitle className="text-base sm:text-lg md:text-xl font-semibold mt-2">
-                {previewDocName || 'Documento'}
-              </DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm md:text-base">
-                Visualización de documento PDF
-              </DialogDescription>
-            </DialogHeader>
-            <div className="preview-doc-bg flex-1 w-full overflow-hidden" style={{ 
-              minHeight: 0, 
-              height: 'calc(95vh - 160px)',
-              flex: '1 1 auto'
-            }}>
+            <PreviewDialogHeader
+              title={previewDocName || 'Documento'}
+              description="Visualización de documento PDF"
+              onClose={closeDocPreview}
+            />
+            <div className="preview-doc-bg relative min-h-0 flex-1 w-full overflow-hidden">
               {isLoadingPreview ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center">
@@ -910,43 +907,39 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   </div>
                 </div>
               ) : (
-                <iframe
-                  src={previewDoc}
-                  className="w-full h-full border-0"
-                  title="Document Preview"
-                  style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    minHeight: '500px', 
-                    display: 'block',
-                    border: 'none'
-                  }}
-                  onError={(e) => {
-                    logger.error('Error cargando PDF en iframe', {
-                      previewDoc: previewDoc?.substring(0, 50),
-                      error: e.type,
-                    });
-                    toast.error('Error al mostrar PDF', 'No se pudo cargar el documento en el visor');
-                  }}
-                />
+                <>
+                  <object
+                    data={previewDoc}
+                    type="application/pdf"
+                    className="absolute inset-0 h-full w-full"
+                    aria-label={previewDocName || 'Vista previa PDF'}
+                  >
+                    <iframe
+                      src={previewDoc}
+                      className="h-full w-full border-0"
+                      title={previewDocName || 'Vista previa PDF'}
+                    />
+                  </object>
+                </>
               )}
             </div>
-            <DialogFooter className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-5 sm:pb-7 md:pb-8 flex-shrink-0 border-t bg-background">
+            <DialogFooter className="flex shrink-0 flex-col gap-2 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
+              {previewDoc && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="h-11 w-full sm:w-auto"
+                  onClick={() => window.open(previewDoc, '_blank', 'noopener,noreferrer')}
+                >
+                  Abrir en pestaña nueva
+                </Button>
+              )}
               <Button
-                size="sm"
-                onClick={() => {
-                  // Limpiar blob URL al cerrar
-                  if (previewDoc && previewDoc.startsWith('blob:')) {
-                    try {
-                      URL.revokeObjectURL(previewDoc);
-                    } catch (error) {
-                      // Ignorar errores al revocar
-                    }
-                  }
-                  setPreviewDoc(null);
-                  setPreviewDocName(null);
-                }}
-                className="w-full sm:w-auto ml-auto px-4 py-2 mb-1 sm:mb-0"
+                type="button"
+                size="lg"
+                className="h-11 w-full sm:min-w-[10rem]"
+                onClick={closeDocPreview}
               >
                 Cerrar
               </Button>
