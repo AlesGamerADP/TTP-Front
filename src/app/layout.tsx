@@ -1,5 +1,4 @@
 import '../styles/global.css';
-import '../styles/radix-tabs.css';
 import { ErrorBoundaryWrapper } from '../components/common/ErrorBoundaryWrapper';
 import { Toaster } from '../components/ui/sonner';
 import { ThemeProvider } from '../components/theme/ThemeProvider';
