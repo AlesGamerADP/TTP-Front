@@ -22,7 +22,9 @@ import {
 } from '../ui/dialog';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { UserPlus, Pencil, Trash2, Search, Building2, Shield, Mail } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, Search, Building2, Shield, Mail, RefreshCw } from 'lucide-react';
+import { generateReadablePassword } from '../../lib/generate-password';
+import { cn } from '../ui/utils';
 import { useToast } from '../../hooks/useToast';
 import { useDebounce } from '../../hooks/useDebounce';
 import { createUserSchema, passwordSchema } from '../../lib/validations';
@@ -78,7 +80,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     role: 'client' as UserRole,
     company_id: '',
     access_code: '',
-    password: '', // Campo opcional para contraseña
   });
 
   const normalizeOptionalString = (value: string): string | undefined => {
@@ -103,7 +104,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
       role: 'client',
       company_id: '',
       access_code: '',
-      password: '',
     });
   };
 
@@ -168,15 +168,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
         return;
       }
 
-      const trimmedPassword = normalizeOptionalString(formData.password);
-      if (trimmedPassword) {
-        const passwordValidation = passwordSchema.safeParse(trimmedPassword);
-        if (!passwordValidation.success) {
-          toast.error(passwordValidation.error.issues[0]?.message || 'Contraseña inválida');
-          return;
-        }
-      }
-
       // Preparar datos para el backend
       const updateData: UpdateUserInput = {
         email: formData.email.trim(),
@@ -196,11 +187,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
       // Solo incluir access_code si está presente y no está vacío
       if (normalizeOptionalString(formData.access_code)) {
         updateData.access_code = formData.access_code.trim();
-      }
-
-      // Incluir contraseña solo si se proporciona una nueva
-      if (trimmedPassword) {
-        updateData.password = trimmedPassword;
       }
 
       // Llamar al API para actualizar el usuario
@@ -251,7 +237,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
       role: user.role,
       company_id: user.company_id || '',
       access_code: user.access_code || '',
-      password: '', // No se muestra la contraseña actual
     });
     setIsEditDialogOpen(true);
   };
@@ -275,16 +260,18 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
 
     try {
       setSendingCredentials(true);
-      // Enviar contraseña solo si se proporciona una, sino enviar string vacío para usar la almacenada
-      const passwordToSend = credentialsPassword.trim() || '';
+      const passwordToSend = credentialsPassword.trim();
+      if (!passwordToSend) {
+        toast.error('Ingresa la contraseña a enviar');
+        setSendingCredentials(false);
+        return;
+      }
 
-      if (passwordToSend) {
-        const passwordValidation = passwordSchema.safeParse(passwordToSend);
-        if (!passwordValidation.success) {
-          toast.error(passwordValidation.error.issues[0]?.message || 'Contraseña inválida');
-          setSendingCredentials(false);
-          return;
-        }
+      const passwordValidation = passwordSchema.safeParse(passwordToSend);
+      if (!passwordValidation.success) {
+        toast.error(passwordValidation.error.issues[0]?.message || 'Contraseña inválida');
+        setSendingCredentials(false);
+        return;
       }
 
       await sendUserCredentialsMutation(selectedUser.id, passwordToSend);
@@ -515,23 +502,6 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="edit_password">Nueva Contraseña (opcional)</Label>
-        <Input
-          id="edit_password"
-          type="password"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          placeholder="Dejar vacío para mantener actual"
-          minLength={8}
-          className={emphasizedFieldClassName}
-          style={emphasizedFieldStyle}
-        />
-        <p className="text-xs text-muted-foreground">
-          Si la cambias, debe tener al menos 8 caracteres, una letra y un número.
-        </p>
-      </div>
-
       {selectedUser && canEditUserRole() && (
         <div className="space-y-2">
           <Label htmlFor="edit_role">Tipo de Usuario</Label>
@@ -595,23 +565,47 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     </div>
   );
 
+  const handleGenerateCredentialsPassword = () => {
+    setCredentialsPassword(
+      generateReadablePassword({
+        userName: selectedUser?.full_name,
+        companyName: selectedUser?.company?.name,
+      }),
+    );
+  };
+
   const renderSendCredentialsFields = () => (
     <div className="space-y-4 py-4">
       <div className="space-y-2">
-        <Label htmlFor="credentials_password">Contraseña a Enviar (Opcional)</Label>
-        <Input
-          id="credentials_password"
-          type="password"
-          value={credentialsPassword}
-          onChange={(e) => setCredentialsPassword(e.target.value)}
-          placeholder="Dejar vacío para usar la contraseña original del usuario"
-          disabled={sendingCredentials}
-          minLength={8}
-          className={emphasizedFieldClassName}
-          style={emphasizedFieldStyle}
-        />
+        <Label htmlFor="credentials_password">Contraseña a Enviar *</Label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <Input
+            id="credentials_password"
+            type="text"
+            autoComplete="off"
+            value={credentialsPassword}
+            onChange={(e) => setCredentialsPassword(e.target.value)}
+            placeholder="Contraseña que recibirá el usuario por correo"
+            disabled={sendingCredentials}
+            required
+            minLength={8}
+            className={cn(emphasizedFieldClassName, 'min-w-0 flex-1')}
+            style={emphasizedFieldStyle}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={sendingCredentials}
+            onClick={handleGenerateCredentialsPassword}
+            className="shrink-0 sm:min-w-[10.5rem]"
+          >
+            <RefreshCw className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
+            Generar segura
+          </Button>
+        </div>
         <p className="text-sm text-muted-foreground">
-          Si lo dejas vacío, se enviará la contraseña actual. Si escribes una nueva, debe tener al menos 8 caracteres, una letra y un número.
+          Debe tener al menos 8 caracteres, una letra y un número. «Generar segura» usa letras del
+          nombre, de la empresa y números (sin símbolos).
         </p>
       </div>
     </div>
