@@ -1,15 +1,17 @@
 import type { Component, ComponentEvent, ComponentStatus } from './model';
 
-type BackendCompanyEmbed = {
+type BackendCompanyRef = {
   id: string;
-  name: string;
+  name?: string | null;
 };
 
 type BackendComponentRecord = {
   id: string;
   company_id?: string | null;
   companyId?: string | null;
-  company?: BackendCompanyEmbed | null;
+  company_name?: string | null;
+  companyName?: string | null;
+  company?: BackendCompanyRef | null;
   serial_number: string;
   model?: string | null;
   ingress_date: string;
@@ -32,27 +34,18 @@ type BackendComponentEventRecord = {
   created_at: string;
 };
 
-function resolveCompanyId(record: BackendComponentRecord): string {
-  const raw = record.company_id ?? record.companyId ?? record.company?.id;
-  return raw ? String(raw) : '';
-}
-
-function mapEmbeddedCompany(record: BackendComponentRecord): Component['company'] | undefined {
-  if (!record.company?.id || !record.company?.name) return undefined;
-  return {
-    id: String(record.company.id),
-    name: record.company.name,
-  };
-}
-
 export function mapBackendComponent(record: BackendComponentRecord): Component {
-  const company_id = resolveCompanyId(record);
-  const company = mapEmbeddedCompany(record);
+  const companyId =
+    record.company_id ?? record.companyId ?? record.company?.id ?? '';
 
   return {
     id: record.id,
-    company_id,
-    company,
+    company_id: companyId,
+    company_name:
+      record.company?.name?.trim() ||
+      record.company_name?.trim() ||
+      record.companyName?.trim() ||
+      undefined,
     serial: record.serial_number,
     modelo: record.model || '',
     fecha_ingreso: record.ingress_date,

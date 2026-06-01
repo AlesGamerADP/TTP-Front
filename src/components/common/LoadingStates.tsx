@@ -113,6 +113,66 @@ export function StatsCardSkeleton() {
   );
 }
 
+/** Shell del detalle de componente — mejora LCP frente a un spinner a pantalla completa. */
+export function ComponentDetailSkeleton() {
+  return (
+    <div className="app-shell min-h-screen">
+      <header className="app-subheader sticky top-0 z-40 border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
+              <Skeleton className="h-9 w-24 shrink-0" />
+              <Skeleton className="hidden h-6 w-px sm:block" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-7 w-48 max-w-full sm:w-64" />
+                <Skeleton className="h-4 w-36 max-w-full" />
+              </div>
+            </div>
+            <Skeleton className="h-8 w-28 shrink-0 rounded-lg" />
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-56" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-40 w-full rounded-lg" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export function SearchResultsSkeleton() {
   return (
     <div className="space-y-2">

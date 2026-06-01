@@ -1,8 +1,10 @@
-// Ofuscación del perfil en localStorage (Web Crypto API).
-// NO es seguridad real: NEXT_PUBLIC_ENCRYPTION_KEY va en el bundle del navegador.
-// La autenticación depende de cookies httpOnly del backend, no de este cifrado.
+/**
+ * @deprecated No usar para datos de sesión/usuario.
+ * NEXT_PUBLIC_* está en el bundle del cliente: no es un secreto.
+ * La autenticación debe basarse solo en cookies httpOnly.
+ */
 
-function resolveEncryptionKey(): string {
+function resolveEncryptionKey(): string | null {
   const envKey = process.env.NEXT_PUBLIC_ENCRYPTION_KEY?.trim();
   if (envKey && envKey.length >= 32) {
     return envKey;
@@ -10,9 +12,7 @@ function resolveEncryptionKey(): string {
   if (process.env.NODE_ENV === 'development') {
     return 'dev-local-encryption-key-32chars-min!!';
   }
-  throw new Error(
-    'NEXT_PUBLIC_ENCRYPTION_KEY no está configurada o es demasiado corta (mínimo 32 caracteres).'
-  );
+  return null;
 }
 
 const ENCRYPTION_KEY = resolveEncryptionKey();
@@ -28,6 +28,9 @@ function arrayBufferToString(buffer: ArrayBuffer): string {
 }
 
 async function getKey(): Promise<CryptoKey> {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('NEXT_PUBLIC_ENCRYPTION_KEY no configurada');
+  }
   const keyData = stringToArrayBuffer(ENCRYPTION_KEY);
   return await crypto.subtle.importKey('raw', keyData, { name: 'PBKDF2' }, false, ['deriveKey']);
 }

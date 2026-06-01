@@ -5,8 +5,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { type User, type UserRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { useAuthStore } from '@/store/auth-store';
-import { isAuthError, isConnectionError } from '@/lib/api-errors';
-import { getBrowserContextInfo } from '@/lib/browser-context';
 import { useCurrentUser } from './useCurrentUser';
 
 type AuthGateMode = 'guest' | 'protected';
@@ -112,18 +110,6 @@ export function useAuthGate({
       } catch (error) {
         logger.error('Error resolving auth gate', { error, mode });
         if (cancelled) {
-          return;
-        }
-
-        const restricted = getBrowserContextInfo().isRestrictedSessionContext;
-        if (
-          mode === 'protected' &&
-          storeUser &&
-          !restricted &&
-          isConnectionError(error) &&
-          !isAuthError(error)
-        ) {
-          setVerifiedUser(storeUser);
           return;
         }
 

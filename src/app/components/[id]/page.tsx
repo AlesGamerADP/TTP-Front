@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import ComponentDetail from '@/features/components/views/ComponentDetailView';
-import { ComponentDetailShell } from '@/components/components/ComponentDetailShell';
+import { ComponentDetail } from '@/components/components/ComponentDetail';
+import { ComponentDetailSkeleton } from '@/components/common/LoadingStates';
 import { useAuthGate } from '@/features/auth/hooks/useAuthGate';
 
 export default function ComponentDetailPage() {
@@ -16,7 +16,7 @@ export default function ComponentDetailPage() {
   };
 
   if (isAuthLoading || !user) {
-    return <ComponentDetailShell onBack={handleBack} />;
+    return <ComponentDetailSkeleton />;
   }
 
   return (

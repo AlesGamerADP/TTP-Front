@@ -634,7 +634,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
           </CardDescription>
           {isMobileViewport ? (
             <>
-              <div className="pt-4">
+              <div className="management-create-button-wrap">
                 <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="management-create-button w-auto">
                   <UserPlus className="h-4 w-4 mr-2" />
                   Crear Usuario

@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { hasSessionCookie, usesSameOriginAuth } from '@/features/auth/server/guards';
 
 const PROTECTED_PREFIXES = ['/dashboard', '/components'];
-const AUTH_PAGES = new Set(['/login']);
 
 export function proxy(request: NextRequest) {
   if (!usesSameOriginAuth) {
@@ -14,7 +13,6 @@ export function proxy(request: NextRequest) {
   const isProtectedRoute = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-  const isAuthPage = AUTH_PAGES.has(pathname);
   const hasSession = hasSessionCookie(request);
 
   if (isProtectedRoute && !hasSession) {
@@ -23,9 +21,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthPage && hasSession) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
+  // No redirigir /login → /dashboard solo por existir cookies: pueden estar
+  // caducadas y provocar bucle con el cliente (401 en /api/users/me).
+  // useAuthGate en modo guest redirige tras validar sesión con el backend.
 
   return NextResponse.next();
 }

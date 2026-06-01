@@ -342,10 +342,10 @@ export function TimelineManager({
   return (
     <Card>
       <CardHeader>
-        <div className="flex w-full items-start justify-between gap-4">
-          <CardTitle className="flex min-w-0 flex-1 items-center leading-snug">
-            <Clock className="mr-2 h-5 w-5 shrink-0" />
-            Gestión de Línea de Tiempo
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <CardTitle className="flex min-w-0 flex-1 items-center gap-2 pr-2 sm:pr-3">
+            <Clock className="h-5 w-5 shrink-0" />
+            <span className="leading-snug">Gestión de Línea de Tiempo</span>
           </CardTitle>
           <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
             <DialogTrigger asChild>
@@ -368,7 +368,7 @@ export function TimelineManager({
               onWheelCapture={(event) => event.stopPropagation()}
             >
               <div
-                className={cn('flex min-w-0 flex-col', isMobile && 'w-full')}
+                className={cn('flex flex-col', isMobile && 'min-w-0 w-full')}
                 style={{ minHeight: 0, height: '100%' }}
               >
               <button
@@ -390,10 +390,7 @@ export function TimelineManager({
               </DialogHeader>
               
               <div
-                className={cn(
-                  'min-w-0 space-y-4 py-3',
-                  isMobile ? 'w-full px-4' : 'pl-4 pr-7',
-                )}
+                className={isMobile ? 'min-w-0 w-full space-y-4 px-4 py-3' : 'min-w-0 space-y-4 py-3 pl-4 pr-7'}
                 style={
                   isMobile
                     ? {
@@ -406,7 +403,7 @@ export function TimelineManager({
                     : {
                         flex: '1 1 auto',
                         minHeight: 0,
-                        overflowY: 'scroll',
+                        overflowY: 'auto',
                         overflowX: 'hidden',
                         overscrollBehavior: 'contain',
                         scrollbarGutter: 'stable',
@@ -415,7 +412,7 @@ export function TimelineManager({
                 }
               >
                 {/* Status Selection */}
-                <div className={isMobile ? 'space-y-2' : 'space-y-2 pr-4'}>
+                <div className={cn('min-w-0 space-y-2', !isMobile && 'pr-4')}>
                   <Label>Nuevo Estado</Label>
                   <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as ComponentStatus)}>
                     <SelectTrigger
@@ -466,16 +463,13 @@ export function TimelineManager({
                     value={eventNote}
                     onChange={(e) => setEventNote(e.target.value)}
                     rows={3}
-                    className={cn(
-                      'event-note-text max-w-full min-w-0 resize-none',
-                      emphasizedFieldClassName,
-                    )}
-                    style={{ ...emphasizedFieldStyle, fieldSizing: 'fixed' }}
+                    className={cn('resize-none min-w-0 max-w-full', emphasizedFieldClassName)}
+                    style={emphasizedFieldStyle}
                   />
                 </div>
 
                 {/* Photos */}
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label>Fotos de Validación</Label>
                   <div className="flex items-center gap-2">
                     <input
@@ -573,7 +567,7 @@ export function TimelineManager({
                 </div>
 
                 {/* Files */}
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label>Archivos Adjuntos</Label>
                   <div className="flex items-center gap-2">
                     <input
@@ -711,20 +705,22 @@ export function TimelineManager({
               <div className="space-y-3">
                 {visibleRecentEvents.map((event) => (
                   <div key={event.id} className="min-w-0 overflow-hidden rounded-lg border p-3">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <Badge variant="outline" className="max-w-full whitespace-normal">
+                    <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
+                      <Badge variant="outline" className="max-w-full shrink truncate">
                         {STATUS_LABELS[event.estado]}
                       </Badge>
                       <div className="flex shrink-0 items-center text-xs text-muted-foreground">
-                        <Calendar className="mr-1 h-3 w-3 shrink-0" />
+                        <Calendar className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
                         {new Date(event.created_at).toLocaleDateString('es-ES')}
                       </div>
                     </div>
                     {event.nota && (
-                      <p className="event-note-text mb-2 text-sm text-muted-foreground">{event.nota}</p>
+                      <p className="event-note-text mb-2 text-sm text-muted-foreground">
+                        {event.nota}
+                      </p>
                     )}
-                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <div className="min-w-0 break-words">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <div className="min-w-0 max-w-full break-words">
                         {getUserDisplayName(event.created_by)}
                       </div>
                       <div className="flex items-center space-x-3">

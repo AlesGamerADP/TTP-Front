@@ -352,7 +352,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
           </CardDescription>
           {isMobileViewport ? (
             <>
-              <div className="pt-5">
+              <div className="management-create-button-wrap">
                 <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="management-create-button w-auto">
                   <Plus className="h-4 w-4 mr-2" />
                   Nueva Empresa

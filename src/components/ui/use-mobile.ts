@@ -13,16 +13,9 @@ export function useIsMobile() {
     const onChange = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
-    setIsMobile(mql.matches);
-
-    if (typeof mql.addEventListener === 'function') {
-      mql.addEventListener('change', onChange);
-      return () => mql.removeEventListener('change', onChange);
-    }
-
-    // Safari / navegadores antiguos (< 14)
-    mql.addListener(onChange);
-    return () => mql.removeListener(onChange);
+    mql.addEventListener("change", onChange);
+    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    return () => mql.removeEventListener("change", onChange);
   }, []);
 
   return !!isMobile;

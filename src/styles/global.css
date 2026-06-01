@@ -660,12 +660,6 @@
     field-sizing: content;
   }
 
-  @supports not (field-sizing: content) {
-    .field-sizing-content {
-      min-height: 4rem;
-    }
-  }
-
   .size-3\.5 {
     width: calc(var(--spacing) * 3.5);
     height: calc(var(--spacing) * 3.5);
@@ -2609,11 +2603,25 @@ html {
 
 .management-card-header {
   column-gap: 1.5rem;
+  row-gap: 0.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.management-create-button-wrap {
+  margin-top: 0.5rem;
+  padding-bottom: 0.25rem;
 }
 
 @media (max-width: 640px) {
   .management-card-header {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.75rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .management-create-button-wrap {
+    margin-top: 0.75rem;
+    padding-bottom: 0.5rem;
   }
 
   .management-card-action {
@@ -2621,6 +2629,7 @@ html {
     grid-row: 3;
     justify-self: start;
     margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
   }
 }
 
@@ -2778,8 +2787,18 @@ body {
 }
 
 .event-note-text {
+  max-width: 100%;
+  min-width: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+[data-slot="textarea"] {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .event-detail-card-content {
@@ -3571,7 +3590,10 @@ html {
   border-color: var(--border);
   background: var(--muted);
   color: var(--muted-foreground);
-  padding-inline: 1rem;
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
 }
 
 .timeline-status-panel {
@@ -3607,35 +3629,45 @@ html {
   background: var(--muted);
 }
 
-.preview-dialog-header {
-  position: relative;
-  z-index: 20;
+/* Visor PDF: ancho intermedio (no pantalla completa ni columna estrecha) */
+.preview-doc-dialog {
+  width: min(90vw, 76rem) !important;
+  max-width: min(96vw, 80rem) !important;
 }
 
+/* Botón cerrar en visores de imagen/PDF (alto contraste en móvil y modo oscuro) */
 .preview-dialog-close {
-  background: var(--card) !important;
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  flex-shrink: 0;
+  border-width: 2px !important;
+  border-color: color-mix(in oklab, var(--foreground) 28%, transparent) !important;
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+  box-shadow: 0 1px 4px color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.preview-dialog-close:hover {
+  background-color: var(--muted) !important;
+  border-color: color-mix(in oklab, var(--foreground) 40%, transparent) !important;
   color: var(--foreground) !important;
 }
 
 .dark .preview-dialog-close {
-  background: #f4f4f5 !important;
-  color: #18181b !important;
-  border-color: #e4e4e7 !important;
+  border-color: color-mix(in oklab, var(--foreground) 55%, transparent) !important;
+  background-color: var(--foreground) !important;
+  color: var(--background) !important;
 }
 
-.preview-dialog-shell {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  max-height: 100dvh;
-  overflow: hidden;
+.dark .preview-dialog-close:hover {
+  background-color: color-mix(in oklab, var(--foreground) 88%, var(--background)) !important;
+  color: var(--background) !important;
 }
 
-@media (min-width: 640px) {
-  .preview-dialog-shell {
-    height: auto;
-    max-height: 95vh;
-  }
+.safe-area-pb {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
 .progress-track {

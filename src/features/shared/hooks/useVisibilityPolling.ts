@@ -54,12 +54,20 @@ export function useVisibilityPolling(
       }
     };
 
+    // Safari/iOS restaura la pestaña desde bfcache sin disparar visibilitychange.
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && refreshOnFocus) {
+        void callback();
+      }
+    };
+
     if (runOnMount) {
       void callback();
     }
 
     schedulePolling();
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
     if (refreshOnFocus) {
       window.addEventListener('focus', handleWindowFocus);
     }
@@ -67,6 +75,7 @@ export function useVisibilityPolling(
     return () => {
       clearCurrentInterval();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
       if (refreshOnFocus) {
         window.removeEventListener('focus', handleWindowFocus);
       }

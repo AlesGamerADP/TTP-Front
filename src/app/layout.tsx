@@ -8,15 +8,16 @@ import { defaultMetadata } from '@/lib/metadata';
 import { OrganizationSchema, WebApplicationSchema } from '@/components/seo/StructuredData';
 import { ResourceHints } from '@/components/seo/ResourceHints';
 import { StorageInitializer } from '@/components/common/StorageInitializer';
-import type { Metadata } from 'next';
+import { usesBrowserApiProxy } from '@/lib/api';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = defaultMetadata;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const publicApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   const shouldPreconnectApi =
-    !!publicApiUrl && publicApiUrl.startsWith('http');
+    !usesBrowserApiProxy() && !!publicApiUrl && publicApiUrl.startsWith('http');
 
   return (
     <html lang="es" suppressHydrationWarning>
@@ -54,14 +55,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </a>
             {children}
             <Toaster position="top-right" richColors />
+            {process.env.NODE_ENV === 'production' && <SpeedInsights />}
           </ErrorBoundaryWrapper>
-          <SpeedInsights
-            scriptSrc={
-              process.env.NODE_ENV === 'development'
-                ? '/vercel/speed-insights.debug.js'
-                : undefined
-            }
-          />
         </ThemeProvider>
       </body>
     </html>

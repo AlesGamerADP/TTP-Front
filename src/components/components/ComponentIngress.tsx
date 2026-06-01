@@ -18,7 +18,7 @@ import {
   Hash
 } from 'lucide-react';
 import type { User } from '@/features/auth/model';
-import { getCompanyNameFromCatalog } from '@/features/companies/catalog';
+import { resolveCompanyName } from '@/features/companies/catalog';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
 import { createComponentMutation } from '@/features/components/mutations';
 import { useIsMobile } from '../ui/use-mobile';
@@ -108,7 +108,7 @@ export function ComponentIngress({ currentUser, onBack, onComponentCreated }: Co
       };
       
       const newComponent = await createComponentMutation(componentData);
-      const companyName = getCompanyNameFromCatalog(formData.company_id);
+      const companyName = resolveCompanyName(formData.company_id, companies);
       
       toast.success(`Componente ${newComponent.serial} ingresado exitosamente para ${companyName}`);
       

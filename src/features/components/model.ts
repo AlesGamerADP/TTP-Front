@@ -1,5 +1,3 @@
-import type { Company } from '@/features/auth/model';
-
 export type ComponentStatus =
   | 'ingreso'
   | 'evaluacion'
@@ -14,7 +12,8 @@ export type ComponentStatus =
 export interface Component {
   id: string;
   company_id: string;
-  company?: Pick<Company, 'id' | 'name'>;
+  /** Nombre embebido desde la API cuando viene en `company.name` */
+  company_name?: string;
   serial: string;
   modelo: string;
   fecha_ingreso: string;

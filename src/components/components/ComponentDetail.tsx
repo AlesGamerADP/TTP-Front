@@ -1,25 +1,24 @@
 'use client';
 
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Dialog, DialogContent, DialogFooter } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
 import { ProgressTimeline } from './ProgressTimeline';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { ComponentDetailShell } from './ComponentDetailShell';
-import { PreviewDialogHeader } from '../common/PreviewDialogHeader';
+import { ComponentDetailSkeleton } from '../common/LoadingStates';
 import { Skeleton } from '../ui/skeleton';
 import { useIsMobile } from '../ui/use-mobile';
 import dynamic from 'next/dynamic';
 
 // Lazy load componentes pesados - solo se cargan cuando se necesitan
 const TimelineManager = dynamic(() => import('@/features/components/views/TimelineManagerView'), {
-  loading: () => <Skeleton className="h-32 w-full rounded-lg" />,
-  ssr: false,
+  loading: () => <div className="p-4 text-center text-sm text-muted-foreground">Cargando editor...</div>,
+  ssr: false
 });
 import {
   ArrowLeft,
@@ -32,18 +31,13 @@ import {
   Package,
   Trash2,
   CheckCircle2,
-  Circle
+  Circle,
+  X,
 } from 'lucide-react';
 import {
   type User,
 } from '../../lib/auth';
 import { componentsApi } from '../../lib/api';
-import {
-  fetchPhotoPreviewBlobUrl,
-  resolvePdfPreviewUrl,
-  resolvePhotoPreviewUrl,
-  revokeBlobUrlIfNeeded,
-} from '@/lib/media-fetch';
 import { getComponentStatusBadgeClass } from '../../lib/component-status-style';
 import { logger } from '../../lib/logger';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
@@ -77,17 +71,61 @@ function formatEventDateTime(dateStr: string): string {
 }
 
 function truncateFileName(name: string, maxLength = 28): string {
-  const decoded = decodeFileName(name);
-  if (decoded.length <= maxLength) return decoded;
-  return `${decoded.slice(0, maxLength - 1)}…`;
+  if (name.length <= maxLength) return name;
+  return `${name.slice(0, maxLength - 1)}…`;
 }
 
-function decodeFileName(name: string): string {
-  try {
-    return decodeURIComponent(name.replace(/\+/g, ' '));
-  } catch {
-    return name;
+function resolveEventPhotoUrls(fotos: string[]): string[] {
+  return fotos
+    .map((photo) =>
+      componentsApi.getPhotoUrl(typeof photo === 'string' ? photo : String(photo), { size: 'full' }),
+    )
+    .filter((url) => url.length > 0);
+}
+
+function displayFileName(name: string): string {
+  const cleaned = name.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  if (!cleaned || /â/.test(cleaned)) {
+    return 'Documento.pdf';
   }
+  return cleaned;
+}
+
+function asPdfBlob(blob: Blob): Blob {
+  if (blob.type === 'application/pdf') {
+    return blob;
+  }
+  return new Blob([blob], { type: 'application/pdf' });
+}
+
+async function fetchDocumentBlob(docId: string): Promise<Blob> {
+  const url = componentsApi.downloadDocument(docId);
+  const response = await fetch(url, { method: 'GET', credentials: 'include' });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `HTTP ${response.status}`);
+  }
+  return asPdfBlob(await response.blob());
+}
+
+/** Blob URL para el visor: nunca usar la URL /download en iframe (dispara descarga). */
+async function fetchPdfPreviewObjectUrl(doc: ComponentDocumentRecord): Promise<string> {
+  const fileUrl = doc.file_url?.trim();
+  if (fileUrl?.startsWith('http://') || fileUrl?.startsWith('https://')) {
+    try {
+      const response = await fetch(fileUrl);
+      if (response.ok) {
+        return URL.createObjectURL(asPdfBlob(await response.blob()));
+      }
+    } catch (error: unknown) {
+      logger.warn('PDF desde file_url no disponible, usando API', {
+        docId: doc.id,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+  }
+  const blob = await fetchDocumentBlob(doc.id);
+  return URL.createObjectURL(blob);
 }
 
 export const ComponentDetail = memo(function ComponentDetail({ componentId, currentUser, onBack }: ComponentDetailProps) {
@@ -101,8 +139,13 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     isLoadingDetails,
     reload,
   } = useComponentDetailData(componentId);
+
+  useEffect(() => {
+    if (!isLoading && !component) {
+      onBack();
+    }
+  }, [component, isLoading, onBack]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [historyTab, setHistoryTab] = useState('details');
 
   // Estados para previsualización de imágenes
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -113,20 +156,59 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
   // Estados para previsualización de documentos
   const [previewDoc, setPreviewDoc] = useState<string | null>(null);
   const [previewDocName, setPreviewDocName] = useState<string | null>(null);
+  const [previewDocOpen, setPreviewDocOpen] = useState(false);
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const closeImagePreview = () => {
-    previewImages.forEach((url) => revokeBlobUrlIfNeeded(url));
-    revokeBlobUrlIfNeeded(previewImage);
+    previewImages.forEach((url) => {
+      if (url?.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // Ignorar errores al revocar
+        }
+      }
+    });
     setPreviewImage(null);
     setPreviewImages([]);
     setPreviewIndex(0);
   };
 
   const closeDocPreview = () => {
-    revokeBlobUrlIfNeeded(previewDoc);
+    if (previewDoc?.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(previewDoc);
+      } catch {
+        // Ignorar errores al revocar
+      }
+    }
     setPreviewDoc(null);
     setPreviewDocName(null);
+    setPreviewDocOpen(false);
+    setPreviewDocId(null);
+    setIsLoadingPreview(false);
+  };
+
+  const openPdfPreview = async (doc: ComponentDocumentRecord, fileName: string) => {
+    setPreviewDocName(displayFileName(fileName));
+    setPreviewDocId(doc.id);
+    setPreviewDocOpen(true);
+    setIsLoadingPreview(true);
+    setPreviewDoc(null);
+
+    try {
+      const blobUrl = await fetchPdfPreviewObjectUrl(doc);
+      setPreviewDoc(blobUrl);
+    } catch (error: unknown) {
+      closeDocPreview();
+      toast.error(
+        'Error al cargar PDF',
+        error instanceof Error ? error.message : 'No se pudo cargar el documento',
+      );
+    } finally {
+      setIsLoadingPreview(false);
+    }
   };
 
   const relatedDocsByEvent = useMemo(() => {
@@ -186,22 +268,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     isDeleting,
   } = useComponentDetailActions({ componentId, reload, onBack });
 
-  if (isLoading && !component) {
-    return <ComponentDetailShell onBack={onBack} />;
-  }
-
-  if (!component) {
-    return (
-      <div className="app-shell flex min-h-screen items-center justify-center">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Componente no encontrado</h3>
-            <Button onClick={onBack}>Volver al Dashboard</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+  if (isLoading || !component) {
+    return <ComponentDetailSkeleton />;
   }
 
   const sortedEvents = Array.isArray(events) ? [...events].sort((a, b) =>
@@ -225,41 +293,22 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
             variant="outline"
             size="sm"
             className="event-resource-button h-8 min-w-0"
-            onClick={async (e) => {
+            onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
 
-              try {
-                const photoUrls: string[] = [];
-
-                for (const photo of event.fotos) {
-                  try {
-                    const photoPath = typeof photo === 'string' ? photo : String(photo);
-                    photoUrls.push(await resolvePhotoPreviewUrl(photoPath));
-                  } catch (error: unknown) {
-                    logger.error('Error cargando foto individual', {
-                      photo,
-                      error: error instanceof Error ? error.message : error,
-                    });
-                  }
-                }
-
-                if (photoUrls.length > 0) {
-                  setPreviewImages(photoUrls);
-                  setPreviewImage(photoUrls[0]);
-                  setPreviewIndex(0);
-                } else {
-                  toast.error(
-                    'Error al cargar imágenes',
-                    'No se pudieron cargar las fotos. Comprueba la sesión o abre la app en Safari/Chrome.',
-                  );
-                }
-              } catch (error: unknown) {
-                toast.error(
-                  'Error al procesar imágenes',
-                  error instanceof Error ? error.message : 'Error desconocido',
-                );
+              const photoUrls = resolveEventPhotoUrls(event.fotos);
+              if (photoUrls.length > 0) {
+                setPreviewImages(photoUrls);
+                setPreviewImage(photoUrls[0]);
+                setPreviewIndex(0);
+                return;
               }
+
+              toast.error(
+                'Error al cargar imágenes',
+                'No se pudieron resolver las URLs de las fotos.',
+              );
             }}
           >
             <Eye className="mr-2 h-4 w-4 shrink-0" />
@@ -268,7 +317,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
         )}
 
         {relatedDocs.map((doc, idx) => {
-          const fileName = decodeFileName(doc.file_name || `archivo-${idx + 1}`);
+          const fileName = doc.file_name || `archivo-${idx + 1}`;
           const isPdf = fileName.toLowerCase().endsWith('.pdf');
 
           return (
@@ -281,19 +330,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
               title={fileName}
               onClick={async () => {
                 if (isPdf) {
-                  setIsLoadingPreview(true);
-                  try {
-                    const url = await resolvePdfPreviewUrl(doc.id);
-                    setPreviewDoc(url);
-                    setPreviewDocName(fileName);
-                  } catch (error: unknown) {
-                    toast.error(
-                      'Error al cargar PDF',
-                      error instanceof Error ? error.message : 'No se pudo cargar el documento',
-                    );
-                  } finally {
-                    setIsLoadingPreview(false);
-                  }
+                  await openPdfPreview(doc, fileName);
                 } else {
                   try {
                     await componentsApi.downloadDocumentWithFetch(doc.id, fileName);
@@ -342,29 +379,26 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     <Card>
       <CardHeader>
         <CardTitle>Historial de Eventos</CardTitle>
-        {!isLoadingDetails && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            Total eventos: {sortedEvents.length} |
-            Eventos con fotos: {sortedEvents.filter(e => e.fotos && e.fotos.length > 0).length}
-          </div>
-        )}
+        <div className="mt-2 text-xs text-muted-foreground">
+          Total eventos: {sortedEvents.length} |
+          Eventos con fotos: {sortedEvents.filter(e => e.fotos && e.fotos.length > 0).length}
+        </div>
       </CardHeader>
       <CardContent>
-        {isLoadingDetails ? (
-          <div className="space-y-3" aria-busy="true" aria-label="Cargando historial">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-40 w-full" />
-          </div>
-        ) : (
-        <Tabs value={historyTab} onValueChange={setHistoryTab} className="w-full">
+        <Tabs defaultValue={isMobileViewport ? 'details' : 'timeline'} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="timeline">Línea de Tiempo</TabsTrigger>
             <TabsTrigger value="details">Detalles</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="timeline" className="mt-6 space-y-0">
-            {historyTab === 'timeline' && (sortedEvents.length === 0 ? (
+          <TabsContent value="timeline" className="space-y-0 mt-6">
+            {isLoadingDetails ? (
+              <div className="space-y-4 py-4" aria-busy="true" aria-label="Cargando historial">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : sortedEvents.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No hay eventos registrados</p>
@@ -404,7 +438,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                                 {isFirst && (
                                   <Badge
                                     variant="outline"
-                                    className="event-meta-badge font-normal rounded-sm py-1"
+                                    className="event-meta-badge font-normal rounded-sm"
                                   >
                                     Más reciente
                                   </Badge>
@@ -426,6 +460,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                                 {event.nota}
                               </p>
                             )}
+                            {renderEventAttachments(event)}
                             {!isMobileViewport && (
                               <>
                                 <div className="flex flex-wrap items-center gap-3">
@@ -469,12 +504,17 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   );
                 })}
               </div>
-            ))}
+            )}
           </TabsContent>
 
           <TabsContent value="details" className="space-y-4">
-            {historyTab === 'details' &&
-            groupedEvents.map((group) => {
+            {isLoadingDetails ? (
+              <div className="space-y-4" aria-busy="true">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : groupedEvents.map((group) => {
               const isMulti = group.events.length > 1;
               const singleEvent = group.events[0];
               return (
@@ -495,7 +535,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                       {isMulti && (
                         <Badge
                           variant="outline"
-                          className="event-meta-badge w-fit font-normal"
+                          className="event-meta-badge w-fit rounded-sm font-normal"
                         >
                           {group.events.length} actualizaciones
                         </Badge>
@@ -536,7 +576,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                     ) : (
                       <>
                         {singleEvent.nota ? (
-                          <p className="event-note-text mb-3 text-sm">{singleEvent.nota}</p>
+                          <p className="event-note-text mb-3 min-w-0 text-sm">{singleEvent.nota}</p>
                         ) : null}
                         {renderEventAttachments(singleEvent)}
                       </>
@@ -547,7 +587,6 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
             })}
           </TabsContent>
         </Tabs>
-        )}
       </CardContent>
     </Card>
   );
@@ -749,21 +788,46 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
 
       {/* Dialog para previsualizar imágenes */}
       {previewImage && (
-        <Dialog
-          open={!!previewImage}
+        <Dialog 
+          open={!!previewImage} 
           onOpenChange={(open) => {
             if (!open) closeImagePreview();
           }}
         >
           <DialogContent
             hideCloseButton
-            className="preview-dialog-shell left-0 top-0 max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[90vh] sm:max-h-[95vh] sm:w-[min(96vw,72rem)] sm:max-w-6xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:border"
+            className="w-[calc(100vw-2rem)] sm:w-[calc(100vw-3rem)] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-w-6xl h-[90vh] sm:h-[85vh] max-h-[95vh] overflow-hidden p-0 m-1 sm:m-2 flex flex-col"
+            style={
+              isMobileViewport
+                ? {
+                    width: 'calc(100vw - 1rem)',
+                    height: '94vh',
+                    maxHeight: '96vh',
+                    margin: '0.25rem',
+                  }
+                : undefined
+            }
           >
-            <PreviewDialogHeader
-              title={`Foto ${previewIndex + 1} de ${previewImages.length}`}
-              description="Visualización de imagen del evento"
-              onClose={closeImagePreview}
-            />
+            <DialogHeader className="flex flex-row items-start gap-3 px-4 sm:px-5 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 flex-shrink-0 border-b text-left">
+              <div className="min-w-0 flex-1 space-y-1">
+                <DialogTitle className="text-sm sm:text-base md:text-lg font-semibold">
+                  Foto {previewIndex + 1} de {previewImages.length}
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Visualización de imagen del evento
+                </DialogDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="preview-dialog-close shrink-0"
+                onClick={closeImagePreview}
+                aria-label="Cerrar vista previa"
+              >
+                <X className="size-5" />
+              </Button>
+            </DialogHeader>
             <div className="preview-media-bg relative flex flex-1 items-center justify-center overflow-hidden" style={{ minHeight: 0 }}>
               {previewImages.length > 1 && (
                 <>
@@ -808,32 +872,27 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                         width: 'auto',
                         height: 'auto'
                       }}
-                      onError={async () => {
-                        if (
-                          previewImage &&
-                          !previewImage.startsWith('blob:') &&
-                          previewImage.includes('/api/components/_photos/')
-                        ) {
+                      onError={(e) => {
+                        const errorInfo: Record<string, any> = {
+                          index: previewIndex,
+                          hasPreviewImage: !!previewImage,
+                          previewImageType: previewImage?.startsWith('blob:') ? 'blob' : 
+                                          previewImage?.startsWith('data:') ? 'data' : 'other',
+                        };
+                        
+                        if (previewImage) {
                           try {
-                            const blobUrl = await fetchPhotoPreviewBlobUrl(previewImage);
-                            revokeBlobUrlIfNeeded(previewImage);
-                            setPreviewImage(blobUrl);
-                            setPreviewImages((prev) =>
-                              prev.map((u, i) => (i === previewIndex ? blobUrl : u)),
-                            );
-                            return;
-                          } catch (fallbackError) {
-                            logger.error('Fallback blob para foto falló', {
-                              error:
-                                fallbackError instanceof Error
-                                  ? fallbackError.message
-                                  : fallbackError,
-                            });
+                            if (previewImage.startsWith('blob:')) {
+                              errorInfo.previewImageLength = previewImage.length;
+                            } else {
+                              errorInfo.previewImagePreview = previewImage.substring(0, 50) + '...';
+                            }
+                          } catch {
+                            errorInfo.previewImage = 'N/A';
                           }
                         }
-                        logger.error('Error cargando imagen en preview', {
-                          index: previewIndex,
-                        });
+                        
+                        logger.error('Error cargando imagen en preview', errorInfo);
                         toast.error('Error al cargar imagen', 'No se pudo mostrar la imagen');
                       }}
                       onLoad={() => {
@@ -848,21 +907,11 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 )}
               </div>
             </div>
-            <DialogFooter className="flex shrink-0 flex-row gap-2 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:justify-end">
+            <DialogFooter className="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 pt-2 sm:pt-3 flex-shrink-0 border-t bg-background">
               <Button
-                type="button"
                 variant="outline"
                 size="sm"
-                className="h-10 flex-1 sm:flex-none sm:min-w-[8rem]"
-                onClick={closeImagePreview}
-              >
-                Cerrar
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="h-10 flex-1 sm:flex-none sm:min-w-[8rem]"
+                className="h-8 sm:h-9 w-full sm:w-auto text-xs sm:text-sm"
                 onClick={() => {
                   const link = document.createElement('a');
                   link.href = previewImage || '';
@@ -873,8 +922,9 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   document.body.removeChild(link);
                 }}
               >
-                <Download className="mr-2 h-4 w-4" />
-                Descargar
+                <Download className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Descargar Foto</span>
+                <span className="sm:hidden">Descargar</span>
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -882,23 +932,51 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
       )}
 
       {/* Dialog para previsualizar documentos */}
-      {previewDoc && (
-        <Dialog
-          open={!!previewDoc}
-          onOpenChange={(open) => {
-            if (!open) closeDocPreview();
-          }}
-        >
+      {previewDocOpen && (
+        <Dialog open={previewDocOpen} onOpenChange={(open) => {
+          if (!open) closeDocPreview();
+        }}>
           <DialogContent
             hideCloseButton
-            className="preview-dialog-shell left-0 top-0 max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:left-[50%] sm:top-[50%] sm:h-[90vh] sm:max-h-[95vh] sm:w-[min(96vw,72rem)] sm:max-w-6xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:border"
+            className="preview-doc-dialog !flex !max-w-[min(96vw,80rem)] w-[min(calc(100vw-1.25rem),96vw)] sm:w-[min(calc(100vw-2rem),94vw)] md:w-[min(90vw,76rem)] h-[90vh] sm:h-[92vh] md:h-[95vh] max-h-[98vh] overflow-hidden p-0 m-1 sm:m-2 flex-col"
+            style={
+              isMobileViewport
+                ? {
+                    width: 'calc(100vw - 1rem)',
+                    maxWidth: 'calc(100vw - 1rem)',
+                    margin: '0.25rem',
+                  }
+                : undefined
+            }
           >
-            <PreviewDialogHeader
-              title={previewDocName || 'Documento'}
-              description="Visualización de documento PDF"
-              onClose={closeDocPreview}
-            />
-            <div className="preview-doc-bg relative min-h-0 flex-1 w-full overflow-hidden">
+            <DialogHeader className="flex flex-row items-start gap-3 px-4 sm:px-6 md:px-8 pt-4 sm:pt-5 md:pt-6 pb-3 flex-shrink-0 border-b text-left">
+              <div className="min-w-0 flex-1 space-y-1">
+                <DialogTitle className="text-base sm:text-lg md:text-xl font-semibold line-clamp-2">
+                  {previewDocName || 'Documento'}
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm md:text-base">
+                  Visualización de documento PDF
+                </DialogDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="preview-dialog-close shrink-0"
+                onClick={closeDocPreview}
+                aria-label="Cerrar documento"
+              >
+                <X className="size-5" />
+              </Button>
+            </DialogHeader>
+            <div
+              className="preview-doc-bg flex-1 w-full overflow-hidden"
+              style={{
+                minHeight: 0,
+                height: 'calc(95vh - 160px)',
+                flex: '1 1 auto',
+              }}
+            >
               {isLoadingPreview ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center">
@@ -906,40 +984,30 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                     <p className="text-muted-foreground">Cargando documento...</p>
                   </div>
                 </div>
+              ) : previewDoc ? (
+                <iframe
+                  src={`${previewDoc}#navpanes=0&view=FitH`}
+                  className="w-full h-full border-0"
+                  title="Document Preview"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    minHeight: '500px',
+                    display: 'block',
+                    border: 'none',
+                  }}
+                />
               ) : (
-                <>
-                  <object
-                    data={previewDoc}
-                    type="application/pdf"
-                    className="absolute inset-0 h-full w-full"
-                    aria-label={previewDocName || 'Vista previa PDF'}
-                  >
-                    <iframe
-                      src={previewDoc}
-                      className="h-full w-full border-0"
-                      title={previewDocName || 'Vista previa PDF'}
-                    />
-                  </object>
-                </>
+                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                  No se pudo obtener la URL del documento.
+                </div>
               )}
             </div>
-            <DialogFooter className="flex shrink-0 flex-col gap-2 border-t bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end">
-              {previewDoc && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="h-11 w-full sm:w-auto"
-                  onClick={() => window.open(previewDoc, '_blank', 'noopener,noreferrer')}
-                >
-                  Abrir en pestaña nueva
-                </Button>
-              )}
+            <DialogFooter className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-5 sm:pb-7 md:pb-8 flex-shrink-0 border-t bg-background safe-area-pb sm:justify-end">
               <Button
-                type="button"
-                size="lg"
-                className="h-11 w-full sm:min-w-[10rem]"
+                size="sm"
                 onClick={closeDocPreview}
+                className="h-9 w-full max-w-[10rem] sm:w-auto sm:max-w-none sm:ml-auto px-4 py-2 mb-1 sm:mb-0"
               >
                 Cerrar
               </Button>

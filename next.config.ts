@@ -1,62 +1,43 @@
 import path from 'path';
 import type { NextConfig } from "next";
-import { getApiProxyTarget, shouldUseSameOriginApi } from './src/lib/api-config';
 
-const apiProxyTarget = getApiProxyTarget();
+const publicApiOrigin = (process.env.NEXT_PUBLIC_API_URL || '').trim();
 const outputMode = (process.env.NEXT_OUTPUT_MODE || '').trim();
-const isDev = process.env.NODE_ENV !== 'production';
-
-/** Proxy de scripts de Vercel para no abrir va.vercel-scripts.com en la CSP. */
-const vercelSpeedInsightsRewrites = [
-  {
-    source: '/vercel/speed-insights.debug.js',
-    destination:
-      'https://va.vercel-scripts.com/v1/speed-insights/script.debug.js',
-  },
-  {
-    source: '/vercel/speed-insights.js',
-    destination: 'https://va.vercel-scripts.com/v1/speed-insights/script.js',
-  },
+const vercelInsightsOrigins = [
+  'https://va.vercel-scripts.com',
+  'https://vitals.vercel-insights.com',
 ];
 
-function collectApiOriginsForCsp(): string[] {
-  const origins = new Set<string>();
-  const add = (raw: string) => {
-    const value = raw.trim();
-    if (!value || value === '/') return;
-    try {
-      const href = value.startsWith('http') ? value : `http://${value}`;
-      origins.add(new URL(href).origin);
-    } catch {
-      /* ignore invalid URL */
-    }
-  };
-
-  add(process.env.NEXT_PUBLIC_API_URL || '');
-  add(process.env.INTERNAL_API_URL || '');
-  add(apiProxyTarget || '');
-
-  if (isDev) {
-    origins.add('http://localhost:4000');
-    origins.add('http://127.0.0.1:4000');
-  }
-
-  return [...origins];
-}
-
-const apiOriginsCsp = collectApiOriginsForCsp();
+const devLocalApiOrigins =
+  process.env.NODE_ENV === 'development'
+    ? ['http://localhost:4000', 'http://127.0.0.1:4000']
+    : [];
 
 const connectSrc = [
   "'self'",
-  ...apiOriginsCsp,
+  ...(publicApiOrigin && publicApiOrigin !== '/' ? [publicApiOrigin] : []),
   'https://cdnjs.cloudflare.com',
   'https://unpkg.com',
-  ...(isDev ? ['https://vitals.vercel-insights.com'] : []),
+  ...vercelInsightsOrigins,
+  ...devLocalApiOrigins,
 ].join(' ');
 
-const imgSrc = ["'self'", 'data:', 'blob:', 'https:', ...apiOriginsCsp].join(' ');
+const scriptSrc = [
+  "'self'",
+  "'unsafe-eval'",
+  "'unsafe-inline'",
+  'https://cdnjs.cloudflare.com',
+  'https://unpkg.com',
+  ...vercelInsightsOrigins,
+].join(' ');
 
-const frameSrc = ["'self'", 'blob:', ...apiOriginsCsp].join(' ');
+const imgSrc = [
+  "'self'",
+  'data:',
+  'blob:',
+  'https:',
+  ...devLocalApiOrigins,
+].join(' ');
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -72,8 +53,8 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
-  // En dev, comprimir respuestas del proxy /api puede romper gzip del backend (ERR_CONTENT_DECODING_FAILED).
-  compress: !isDev,
+  // Compresión
+  compress: true,
   
   // Optimizaciones de bundle
   // Nota: SWC minification está habilitado por defecto en Next.js 16
@@ -138,19 +119,6 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   
-  async rewrites() {
-    const rewrites = [...vercelSpeedInsightsRewrites];
-
-    if (shouldUseSameOriginApi() && apiProxyTarget) {
-      rewrites.push({
-        source: '/api/:path*',
-        destination: `${apiProxyTarget}/api/:path*`,
-      });
-    }
-
-    return rewrites;
-  },
-
   // Headers de seguridad y optimización
   async headers() {
     return [
@@ -161,13 +129,13 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com",
+              `script-src ${scriptSrc}`,
               "style-src 'self' 'unsafe-inline'",
               `img-src ${imgSrc}`,
               "font-src 'self' data:",
               "worker-src 'self' blob: https://cdnjs.cloudflare.com https://unpkg.com",
               `connect-src ${connectSrc}`,
-              `frame-src ${frameSrc}`,
+              "frame-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

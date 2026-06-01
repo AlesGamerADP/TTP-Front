@@ -1,29 +1,58 @@
 // API service para conectar con el backend
-import { appendAccessTokenToUrl } from './auth-token';
 import { logger } from './logger';
 
-import {
-  getApiProxyTarget,
-  isBrowserApiProxied,
-  normalizeApiBaseUrl,
-  resolveApiUrl,
-  shouldUseSameOriginApi,
-} from './api-config';
+function normalizeBaseUrl(url: string): string {
+  if (!url) return '';
+  return url === '/' ? '' : url.replace(/\/+$/, '');
+}
 
-export {
-  getApiProxyTarget,
-  isBrowserApiProxied,
-  normalizeApiBaseUrl,
-  resolveApiUrl,
-  shouldUseSameOriginApi,
-} from './api-config';
+/**
+ * El navegador llama a `/api/*` en el mismo dominio (proxy en app/api/[...path]).
+ * Evita cookies cross-site bloqueadas en Safari, iOS y WebViews (WhatsApp).
+ */
+export function usesBrowserApiProxy(): boolean {
+  if (process.env.NEXT_PUBLIC_API_PROXY === 'true') {
+    return true;
+  }
 
-// En AWS el navegador debe hablar con la misma origin pública (`/api`) y el SSR puede usar
-// una URL privada interna (`INTERNAL_API_URL`) para evitar salir por internet.
+  const publicUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
+  return !publicUrl || publicUrl === '/';
+}
+
+/**
+ * En el navegador, rutas /api/* deben ser same-origin (/api/...) para CSP (img-src)
+ * y cookies. Convierte URLs guardadas como http://localhost:4000/api/...
+ */
+export function toSameOriginApiUrl(url: string): string {
+  if (!url) return url;
+  if (url.startsWith('/api/')) return url;
+  if (typeof window === 'undefined') return url;
+
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname.startsWith('/api/')) {
+      return url;
+    }
+
+    const isLocalDevBackend =
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+      (parsed.port === '4000' || parsed.port === '');
+
+    if (usesBrowserApiProxy() || isLocalDevBackend) {
+      return `${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    // URL relativa u otro formato
+  }
+
+  return url;
+}
+
+// SSR usa INTERNAL_API_URL directo; el navegador usa proxy same-origin cuando aplica.
 const getApiBaseUrl = (): string => {
   const isServer = typeof window === 'undefined';
-  const publicUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
-  const internalUrl = normalizeApiBaseUrl(process.env.INTERNAL_API_URL || '');
+  const publicUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
+  const internalUrl = normalizeBaseUrl(process.env.INTERNAL_API_URL || '');
 
   if (isServer) {
     if (internalUrl) return internalUrl;
@@ -37,8 +66,7 @@ const getApiBaseUrl = (): string => {
     throw new Error('Configura INTERNAL_API_URL o NEXT_PUBLIC_API_URL para el runtime del servidor.');
   }
 
-  // Safari iOS bloquea cookies en fetch cross-site (front Vercel → API Render).
-  if (shouldUseSameOriginApi()) {
+  if (usesBrowserApiProxy()) {
     return '';
   }
 
@@ -47,32 +75,14 @@ const getApiBaseUrl = (): string => {
   }
 
   if (process.env.NODE_ENV === 'development') {
-    logger.warn('NEXT_PUBLIC_API_URL no está configurada, usando localhost:4000 como fallback');
-    return 'http://localhost:4000';
+    logger.warn('NEXT_PUBLIC_API_URL no está configurada, usando proxy /api → localhost:4000');
+    return '';
   }
 
   return '';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
-
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
-  const publicUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
-  if (publicUrl && !shouldUseSameOriginApi()) {
-    logger.warn(
-      'API cross-origin en producción: Safari/Firefox móvil pueden bloquear cookies. ' +
-        'Configura NEXT_PUBLIC_USE_SAME_ORIGIN_API=true e INTERNAL_API_URL en Vercel.',
-      { publicUrl },
-    );
-  }
-}
-
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && shouldUseSameOriginApi()) {
-  logger.warn(
-    'NEXT_PUBLIC_USE_SAME_ORIGIN_API activo en desarrollo: las peticiones van por el proxy de Next. ' +
-      'Si /api/users falla con ERR_CONTENT_DECODING_FAILED, quita ese flag y usa NEXT_PUBLIC_API_URL=http://localhost:4000.',
-  );
-}
 
 export interface ApiError {
   error: string;
@@ -182,11 +192,6 @@ class ApiClient {
       'Content-Type': 'application/json',
       ...options.headers,
     };
-
-    // El proxy /api de Next dev + gzip del backend provoca ERR_CONTENT_DECODING_FAILED en el navegador.
-    if (!this.baseUrl && typeof window !== 'undefined') {
-      (headers as Record<string, string>)['Accept-Encoding'] = 'identity';
-    }
 
     if (this.isMutatingMethod(method)) {
       await this.ensureCsrfToken();
@@ -366,7 +371,10 @@ class ApiClient {
           // El componente que llama puede decidir qué hacer
           if (errorData?.code !== 'INVALID_SIGNATURE') {
             // No redirigir automáticamente - dejar que el componente maneje el error
-            throw new Error('No autenticado. Por favor, inicia sesión.');
+            const authError = new Error('No autenticado. Por favor, inicia sesión.');
+            (authError as Error & { status?: number; code?: string }).status = 401;
+            (authError as Error & { status?: number; code?: string }).code = errorData?.code;
+            throw authError;
           }
         }
         
@@ -398,25 +406,7 @@ class ApiClient {
         return { data: text } as T;
       }
 
-      let jsonData: T;
-      try {
-        jsonData = await response.json();
-      } catch (parseError) {
-        const encoding = response.headers.get('content-encoding');
-        logger.error('No se pudo leer el cuerpo de la respuesta API', {
-          url,
-          encoding,
-          contentType: response.headers.get('content-type'),
-          proxied: !this.baseUrl,
-          error: parseError instanceof Error ? parseError.message : parseError,
-        });
-        if (!this.baseUrl) {
-          throw new Error(
-            'Respuesta API corrupta (proxy + compresión). En local usa NEXT_PUBLIC_API_URL=http://localhost:4000 sin USE_SAME_ORIGIN_API, o reinicia npm run dev.',
-          );
-        }
-        throw parseError;
-      }
+      const jsonData = await response.json();
       logger.debug('Response data received', { url, hasData: !!jsonData });
       return jsonData;
     } catch (error) {
@@ -447,19 +437,10 @@ class ApiClient {
         errorDetails = { raw: error };
       }
       
-      const isDecodingError =
-        error instanceof Error &&
-        (/decod/i.test(error.message) ||
-          error.message.includes('Respuesta API corrupta'));
-
-      if (isDecodingError) {
-        throw error;
-      }
-
       // Detectar errores de conexión ANTES de loguear
       const isConnectionError = error instanceof Error && (
         error.message === 'Failed to fetch' || 
-        (error.name === 'TypeError' && !/decod/i.test(error.message)) || 
+        error.name === 'TypeError' || 
         error.message.includes('fetch') ||
         error.name === 'AbortError' ||
         error.message.includes('network') ||
@@ -602,45 +583,32 @@ export const apiClient = new ApiClient(API_BASE_URL);
 // Auth endpoints
 export const authApi = {
   login: async (codigo: string, password: string) => {
-    const response = await apiClient.post<{
-      user: any;
-      csrfToken?: string;
-      accessToken?: string;
-      refreshToken?: string;
-    }>('/api/auth/login', { codigo, password });
+    const response = await apiClient.post<{ user: any; csrfToken?: string }>(
+      '/api/auth/login',
+      { codigo, password }
+    );
     if (response.csrfToken) {
       apiClient.setCsrfToken(response.csrfToken);
-    }
-    if (response.accessToken) {
-      const { setAccessToken } = await import('./auth-token');
-      setAccessToken(response.accessToken);
     }
     return response;
   },
   refresh: async () => {
-    const response = await apiClient.post<{
-      success: boolean;
-      csrfToken?: string;
-      accessToken?: string;
-      refreshToken?: string;
-    }>('/api/auth/refresh', {});
+    const response = await apiClient.post<{ success: boolean; csrfToken?: string }>(
+      '/api/auth/refresh',
+      {}
+    );
     if (response.csrfToken) {
       apiClient.setCsrfToken(response.csrfToken);
-    }
-    if (response.accessToken) {
-      const { setAccessToken } = await import('./auth-token');
-      setAccessToken(response.accessToken);
     }
     return response;
   },
   logout: async () => {
+    // Las cookies se limpian automáticamente por el servidor
     try {
       await apiClient.post('/api/auth/logout', {});
     } catch (error) {
       logger.error('Error during logout', { error });
     }
-    const { setAccessToken } = await import('./auth-token');
-    setAccessToken(null);
   },
 };
 
@@ -696,12 +664,9 @@ function appendPhotoSizeParam(url: string, size?: PhotoDeliverySize): string {
 }
 
 function buildPhotoApiUrl(filename: string, size?: PhotoDeliverySize): string {
-  const base = resolveApiUrl(
-    `/api/components/_photos/${encodeURIComponent(filename)}`,
-  );
-  const withSize = appendPhotoSizeParam(base, size);
-  if (typeof window === 'undefined') return withSize;
-  return appendAccessTokenToUrl(withSize);
+  const path = `/api/components/_photos/${encodeURIComponent(filename)}`;
+  const base = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  return toSameOriginApiUrl(appendPhotoSizeParam(base, size));
 }
 
 // Components endpoints
@@ -746,10 +711,13 @@ export const componentsApi = {
   getDocuments: (id: string) =>
     apiClient.get<{ data: any[] }>(`/api/components/${id}/documents`),
   downloadDocument: (docId: string) => {
-    return resolveApiUrl(`/api/components/_docs/${docId}/download`);
+    const path = `/api/components/_docs/${docId}/download`;
+    const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+    return toSameOriginApiUrl(url);
   },
+  // Función para descargar documento usando fetch con cookies (las cookies se envían automáticamente)
   downloadDocumentWithFetch: async (docId: string, filename: string) => {
-    const url = resolveApiUrl(`/api/components/_docs/${docId}/download`);
+    const url = componentsApi.downloadDocument(docId);
     
     try {
       const response = await fetch(url, {
@@ -785,6 +753,9 @@ export const componentsApi = {
     const size = options?.size;
 
     if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+      if (cleanPath.includes('/api/components/_photos/')) {
+        return toSameOriginApiUrl(appendPhotoSizeParam(cleanPath, size));
+      }
       if (cleanPath.includes('/uploads/')) {
         const filename = cleanPath.split('/').pop() || '';
         if (filename) {
@@ -796,9 +767,9 @@ export const componentsApi = {
 
     if (cleanPath.includes('/api/components/_photos/')) {
       const normalized = cleanPath.startsWith('/')
-        ? resolveApiUrl(cleanPath)
-        : resolveApiUrl(`/${cleanPath}`);
-      return appendPhotoSizeParam(normalized, size);
+        ? `${API_BASE_URL}${cleanPath}`
+        : `${API_BASE_URL}/${cleanPath}`;
+      return toSameOriginApiUrl(appendPhotoSizeParam(normalized, size));
     }
 
     let filename = cleanPath;

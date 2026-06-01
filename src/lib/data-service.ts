@@ -1,11 +1,15 @@
+import { getCurrentSessionUser } from '@/features/auth/session';
 import { componentsApi } from './api';
-import { 
-  type Component, 
-  type ComponentStatus, 
+import { delay, isTransientApiError } from './api-errors';
+import {
+  type Component,
+  type ComponentStatus,
 } from './auth';
 import { logger } from './logger';
-import { enrichCompaniesCatalogFromRecords } from '@/features/companies/catalog';
 import { mapBackendComponent } from '@/features/components/mappers';
+
+const COMPONENTS_FETCH_MAX_ATTEMPTS = 3;
+const COMPONENTS_FETCH_RETRY_DELAYS_MS = [400, 900, 1600];
 
 export interface PaginationParams {
   page: number;
@@ -61,7 +65,6 @@ export async function getComponentsPaginated(
       quotationNumber: params.quotationNumber,
     });
 
-    enrichCompaniesCatalogFromRecords(response.data);
     const mappedData = response.data.map(mapBackendComponent);
     const pagination = response.pagination;
 
@@ -100,11 +103,56 @@ export async function getComponentsPaginated(
   }
 }
 
+async function fetchComponentsPaginatedWithRetry(
+  params: PaginationParams,
+): Promise<PaginatedResponse<Component>> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < COMPONENTS_FETCH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await getComponentsPaginated(params);
+    } catch (error) {
+      lastError = error;
+
+      if (!isTransientApiError(error) || attempt === COMPONENTS_FETCH_MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+
+      if (attempt === 0) {
+        try {
+          await getCurrentSessionUser();
+        } catch {
+          // La sesión puede recuperarse en el siguiente intento
+        }
+      }
+
+      const delayMs = COMPONENTS_FETCH_RETRY_DELAYS_MS[attempt] ?? 1600;
+      logger.debug('Reintentando carga de componentes', { attempt: attempt + 1, delayMs });
+      await delay(delayMs);
+    }
+  }
+
+  throw lastError;
+}
+
+export async function getComponentsPaginatedWithRetry(
+  params: PaginationParams,
+): Promise<PaginatedResponse<Component>> {
+  return fetchComponentsPaginatedWithRetry(params);
+}
+
 export async function getComponentsByCompanyPaginated(
   companyId: string,
   params: Omit<PaginationParams, 'companyId'>
 ): Promise<PaginatedResponse<Component>> {
-  return getComponentsPaginated({ ...params, companyId });
+  return fetchComponentsPaginatedWithRetry({ ...params, companyId });
+}
+
+export async function getComponentsByCompanyPaginatedWithRetry(
+  companyId: string,
+  params: Omit<PaginationParams, 'companyId'>,
+): Promise<PaginatedResponse<Component>> {
+  return getComponentsByCompanyPaginated(companyId, params);
 }
 
 export async function getComponentStats(): Promise<ComponentStats> {
@@ -163,8 +211,7 @@ export async function searchComponents(
       search: query,
       limit,
     });
-
-    enrichCompaniesCatalogFromRecords(response.data);
+    
     return response.data.map(mapBackendComponent);
   } catch (error) {
     logger.error('Error searching components', { error });

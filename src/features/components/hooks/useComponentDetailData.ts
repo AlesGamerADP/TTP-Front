@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Component, ComponentEvent } from '@/features/components/model';
-import { getComponentDetailBundle } from '@/features/components/queries';
+import { getComponentEventsQuery, getComponentQuery } from '@/features/components/queries';
+import { componentsApi } from '@/lib/api';
+import { isConnectionApiError } from '@/lib/api-errors';
 import { logger } from '@/lib/logger';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 
@@ -19,9 +21,7 @@ export function useComponentDetailData(componentId: string) {
   const [component, setComponent] = useState<Component | undefined>(undefined);
   const [events, setEvents] = useState<ComponentEvent[]>([]);
   const [documents, setDocuments] = useState<ComponentDocumentRecord[]>([]);
-  /** Bloquea solo hasta tener datos mínimos del componente (título/header = LCP). */
   const [isLoading, setIsLoading] = useState(true);
-  /** Historial / documentos aún cargando (raro tras bundle unificado). */
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
 
   const reload = useCallback(
@@ -32,32 +32,38 @@ export function useComponentDetailData(componentId: string) {
       }
 
       try {
-        const bundle = await getComponentDetailBundle(componentId);
-        if (!bundle) {
+        const componentData = await getComponentQuery(componentId);
+
+        if (!componentData) {
           setComponent(undefined);
           setEvents([]);
           setDocuments([]);
           return;
         }
 
-        setComponent(bundle.component);
-        setEvents(bundle.events);
-        setDocuments(bundle.documents);
+        setComponent(componentData);
+        if (!silent) {
+          setIsLoading(false);
+        }
 
-        logger.debug('Detalle de componente cargado', {
-          componentId,
-          events: bundle.events.length,
-          documents: bundle.documents.length,
+        const [eventsData, documentsData] = await Promise.all([
+          getComponentEventsQuery(componentId),
+          componentsApi.getDocuments(componentId),
+        ]);
+
+        const eventsArray = Array.isArray(eventsData) ? eventsData : [];
+        logger.debug('Eventos cargados', {
+          total: eventsArray.length,
+          eventosConFotos: eventsArray.filter((event) => event.fotos && event.fotos.length > 0).length,
         });
+
+        setEvents(eventsArray);
+        setDocuments(Array.isArray(documentsData.data) ? documentsData.data : []);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        const isConnectionError =
-          errorMessage?.includes('No se pudo conectar') ||
-          errorMessage?.includes('Failed to fetch') ||
-          (error instanceof Error && error.name === 'TypeError');
 
-        if (isConnectionError) {
-          logger.debug('Error de conexión al cargar detalle, se reintentará', {
+        if (isConnectionApiError(error)) {
+          logger.debug('Error de conexión al cargar datos del componente, se reintentará automáticamente', {
             componentId,
             error: errorMessage,
           });

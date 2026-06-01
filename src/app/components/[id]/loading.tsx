@@ -1,5 +1,5 @@
-import { ComponentDetailShell } from '@/components/components/ComponentDetailShell';
+import { ComponentDetailSkeleton } from '@/components/common/LoadingStates';
 
 export default function ComponentDetailLoading() {
-  return <ComponentDetailShell />;
+  return <ComponentDetailSkeleton />;
 }

@@ -13,7 +13,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
 }
 
-/** Estado de sesión en memoria; la fuente de verdad son cookies httpOnly + persistentStorage cifrado. */
+/** Estado de sesión en memoria; la fuente de verdad son cookies httpOnly (same-origin vía /api). */
 export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   isAuthenticated: false,

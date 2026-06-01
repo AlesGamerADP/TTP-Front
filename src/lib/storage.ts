@@ -1,17 +1,13 @@
 /**
  * Sistema de almacenamiento híbrido
  * 
- * Estrategia de seguridad:
- * - Cookies httpOnly: ÚNICA fuente de verdad para autenticación (tokens; no legibles por JS)
- * - localStorage: Caché opcional de perfil (nombre, rol, empresa) SIN contraseñas ni tokens.
- *   Cifrado AES solo ofusca en el dispositivo; la clave está en el bundle del front.
- * - sessionStorage: Estado UI temporal de la pestaña actual
+ * Estrategia:
+ * - Cookies httpOnly: Tokens de autenticación (manejadas por el backend)
+ * - localStorage: Datos del usuario que persisten entre sesiones
+ * - sessionStorage: Datos temporales de la sesión actual
  */
 
-import type { User } from '@/features/auth/model';
-import { isPersistentStorageAvailable, resetStorageAvailabilityCache } from './browser-context';
 import { logger } from './logger';
-import { mergeCachedUserProfile, toCachedUserProfile, type CachedUserProfile } from './user-cache';
 
 // ============================================
 // KEYS DE STORAGE
@@ -46,81 +42,40 @@ interface UIState {
 }
 
 // ============================================
+// COMPATIBILIDAD ENTRE NAVEGADORES
+// ============================================
+
+/** Safari modo privado / políticas corporativas pueden bloquear localStorage. */
+export function isPersistentStorageAvailable(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const probeKey = '__storage_probe__';
+    window.localStorage.setItem(probeKey, '1');
+    window.localStorage.removeItem(probeKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================
 // LOCALSTORAGE - Datos Persistentes
 // ============================================
 
 export const persistentStorage = {
   /**
-   * Guardar perfil en localStorage (opcional; no debe romper login si falla).
-   * @returns false si el almacenamiento no está disponible (modo privado, WebView, etc.)
+   * Elimina datos de usuario en localStorage de versiones anteriores.
+   * La sesión no debe persistirse ahí: cualquier script en la página podría leerla
+   * y la clave NEXT_PUBLIC_* no es secreta real.
    */
-  async saveUser(user: User): Promise<boolean> {
-    try {
-      if (typeof window === 'undefined') return false;
-      if (!isPersistentStorageAvailable()) {
-        logger.debug('localStorage no disponible; sesión solo en cookies/memoria', {
-          userId: user.id,
-        });
-        return false;
-      }
-
-      const profile = toCachedUserProfile(user);
-      const { encrypt } = await import('./encryption');
-      const encryptedUser = await encrypt(JSON.stringify(profile));
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, encryptedUser);
-      localStorage.setItem(STORAGE_KEYS.LAST_LOGIN, new Date().toISOString());
-
-      logger.debug('User profile cached in localStorage', { userId: user.id });
-      return true;
-    } catch (error) {
-      resetStorageAvailabilityCache();
-      logger.warn('No se pudo guardar perfil en localStorage (no crítico)', {
-        error,
-        userId: user.id,
-      });
-      return false;
-    }
-  },
-
-  /**
-   * Obtener perfil cacheado (solo UX; validar siempre con /api/users/me).
-   */
-  async getUser(): Promise<User | null> {
-    try {
-      if (typeof window === 'undefined') return null;
-      if (!isPersistentStorageAvailable()) return null;
-
-      const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-      if (!stored) return null;
-
-      try {
-        const { decrypt } = await import('./encryption');
-        const decrypted = await decrypt(stored);
-        const parsed = JSON.parse(decrypted) as CachedUserProfile;
-        return mergeCachedUserProfile(parsed);
-      } catch (decryptError) {
-        logger.warn('Caché de usuario ilegible; se elimina', { error: decryptError });
-        this.removeUser();
-        return null;
-      }
-    } catch (error) {
-      resetStorageAvailabilityCache();
-      logger.debug('Error loading user from localStorage', { error });
-      return null;
-    }
-  },
-
-  /**
-   * Eliminar usuario de localStorage
-   */
-  removeUser(): void {
+  removeLegacyUserCache(): void {
     try {
       if (typeof window === 'undefined') return;
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       localStorage.removeItem(STORAGE_KEYS.LAST_LOGIN);
-      logger.debug('User removed from localStorage');
     } catch (error) {
-      logger.error('Failed to remove user from localStorage', { error });
+      logger.debug('Could not clear legacy user cache', { error });
     }
   },
 
@@ -129,11 +84,10 @@ export const persistentStorage = {
    */
   savePreferences(preferences: UserPreferences): void {
     try {
-      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return;
+      if (typeof window === 'undefined') return;
       localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(preferences));
     } catch (error) {
-      resetStorageAvailabilityCache();
-      logger.debug('Failed to save preferences', { error });
+      logger.error('Failed to save preferences', { error });
     }
   },
 
@@ -142,7 +96,7 @@ export const persistentStorage = {
    */
   getPreferences(): UserPreferences | null {
     try {
-      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return null;
+      if (typeof window === 'undefined') return null;
       const stored = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
       return stored ? JSON.parse(stored) : null;
     } catch (error) {
@@ -156,7 +110,7 @@ export const persistentStorage = {
    */
   getLastLogin(): Date | null {
     try {
-      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return null;
+      if (typeof window === 'undefined') return null;
       const stored = localStorage.getItem(STORAGE_KEYS.LAST_LOGIN);
       return stored ? new Date(stored) : null;
     } catch (error) {
@@ -309,7 +263,8 @@ export const cookieStorage = {
       // Hacer una request simple para verificar si las cookies se envían
       // Si el backend responde con 200, significa que hay cookie válida
       const { API_BASE_URL } = await import('./api');
-      const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+      const mePath = API_BASE_URL ? `${API_BASE_URL}/api/users/me` : '/api/users/me';
+      const response = await fetch(mePath, {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -352,16 +307,11 @@ export const cookieStorage = {
  * Limpiar todo el almacenamiento (logout completo)
  */
 export function clearAllStorage(): void {
-  persistentStorage.removeUser();
+  persistentStorage.removeLegacyUserCache();
   sessionStorage.clearSession();
   if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('auth-storage');
-    } catch {
-      /* modo privado / WebView */
-    }
+    localStorage.removeItem('auth-storage');
   }
-  resetStorageAvailabilityCache();
   logger.info('All storage cleared');
 }
 

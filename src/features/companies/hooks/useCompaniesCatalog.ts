@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Company } from '@/features/auth/model';
-import { loadCompaniesCatalog } from '@/features/companies/catalog';
+import { loadCompaniesCatalog, primeCompaniesCatalog } from '@/features/companies/catalog';
 import { logger } from '@/lib/logger';
 
 interface UseCompaniesCatalogOptions {
@@ -21,6 +21,7 @@ export function useCompaniesCatalog(options: UseCompaniesCatalogOptions = {}) {
 
     try {
       const catalog = await loadCompaniesCatalog();
+      primeCompaniesCatalog(catalog);
       setCompanies(catalog);
       return catalog;
     } catch (err: unknown) {

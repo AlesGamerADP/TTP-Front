@@ -1,50 +1,56 @@
-export type ApiErrorLike = Error & {
+type ApiErrorLike = {
   status?: number;
   code?: string;
+  message?: string;
+  name?: string;
 };
 
-export function isAuthError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-
-  const apiError = error as ApiErrorLike;
-  const status = apiError.status;
-  if (status === 401 || status === 403) return true;
-
-  const code = apiError.code?.toUpperCase() ?? '';
-  if (
-    code === 'TOKEN_EXPIRED' ||
-    code === 'INVALID_SIGNATURE' ||
-    code === 'MISSING_TOKEN' ||
-    code === 'UNAUTHORIZED'
-  ) {
-    return true;
+export function getApiErrorMeta(error: unknown): ApiErrorLike {
+  if (!error || typeof error !== 'object') {
+    return { message: String(error) };
   }
 
-  const message = apiError.message?.toLowerCase() ?? '';
+  const record = error as ApiErrorLike;
+  return {
+    status: record.status,
+    code: record.code,
+    message: record.message || String(error),
+    name: record.name,
+  };
+}
+
+export function isUnauthorizedApiError(error: unknown): boolean {
+  const { status, code, message } = getApiErrorMeta(error);
+  if (status === 401) return true;
+  if (code === 'TOKEN_EXPIRED' || code === 'INVALID_SIGNATURE') return true;
+
+  const normalized = (message || '').toLowerCase();
   return (
-    message.includes('no autenticado') ||
-    message.includes('missing token') ||
-    message.includes('session expired') ||
-    message.includes('sesión expirada') ||
-    message.includes('token inválido') ||
-    message.includes('401')
+    normalized.includes('no autenticado') ||
+    normalized.includes('missing token') ||
+    normalized.includes('session expired') ||
+    normalized.includes('sesión expirada') ||
+    normalized.includes('inicia sesión')
   );
 }
 
-export function isConnectionError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-
-  const apiError = error as Error;
-  const message = apiError.message?.toLowerCase() ?? '';
-
+export function isConnectionApiError(error: unknown): boolean {
+  const { message, name } = getApiErrorMeta(error);
+  const normalized = message || '';
   return (
-    message.includes('no se pudo conectar') ||
-    message.includes('failed to fetch') ||
-    message.includes('network error') ||
-    message.includes('networkerror') ||
-    message.includes('error de conexión') ||
-    message.includes('tardó demasiado') ||
-    apiError.name === 'TypeError' ||
-    apiError.name === 'AbortError'
+    name === 'TypeError' ||
+    name === 'AbortError' ||
+    normalized.includes('No se pudo conectar') ||
+    normalized.includes('Failed to fetch') ||
+    normalized.includes('NetworkError') ||
+    normalized.includes('Load failed')
   );
+}
+
+export function isTransientApiError(error: unknown): boolean {
+  return isUnauthorizedApiError(error) || isConnectionApiError(error);
+}
+
+export async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

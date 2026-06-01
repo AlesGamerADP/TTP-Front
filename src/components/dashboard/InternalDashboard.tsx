@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -34,23 +35,22 @@ import {
 } from '../../lib/auth';
 import { type User as UserManagementType } from '../../lib/types';
 import {
-  getComponentsPaginated,
+  getComponentsPaginatedWithRetry,
   getComponentStats,
   type PaginatedResponse
 } from '../../lib/data-service';
+import { getCurrentSessionUser } from '@/features/auth/session';
+import { isConnectionApiError, isUnauthorizedApiError } from '@/lib/api-errors';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logger } from '../../lib/logger';
 import { getComponentStatusBadgeClass } from '../../lib/component-status-style';
 import { getRoleLabel, shouldShowRoleBadge } from '../../lib/user-display';
 import { useIsMobile } from '../ui/use-mobile';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
-import { getCompanyNameFromCatalog, resolveComponentCompanyName } from '@/features/companies/catalog';
-import { authApi } from '@/lib/api';
-import { isAuthError, isConnectionError } from '@/lib/api-errors';
+import { resolveCompanyName } from '@/features/companies/catalog';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
-import { BrowserContextBanner } from '@/components/common/BrowserContextBanner';
 
 const UserManagement = dynamic(() => import('../management/UserManagement'), {
   loading: () => (
@@ -94,12 +94,19 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
   const toast = useToast();
   const { companies } = useCompaniesCatalog({ autoLoad: canAccessComponents });
 
+  const getCompanyLabel = useCallback(
+    (component: Component) =>
+      resolveCompanyName(component.company_id, companies, component.company_name),
+    [companies],
+  );
+
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
 
-  const loadComponents = useCallback(async (options?: { suppressErrorToast?: boolean; retryAuth?: boolean }) => {
+  const loadComponents = useCallback(async (options?: { suppressErrorToast?: boolean }) => {
     setIsLoading(true);
     try {
-      const response = await getComponentsPaginated({
+      // Las cookies httpOnly se envían automáticamente, no necesitamos verificarlas
+      const response = await getComponentsPaginatedWithRetry({
         page: currentPage,
         limit: itemsPerPage,
         search: debouncedSearchTerm,
@@ -115,48 +122,22 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      if (isAuthError(error)) {
-        if (options?.retryAuth !== false) {
-          try {
-            await authApi.refresh();
-            return loadComponents({ ...options, retryAuth: false });
-          } catch (refreshError) {
-            logger.warn('No se pudo renovar la sesión al cargar componentes', {
-              userId: user.id,
-              refreshError,
-            });
-          }
-        }
-
-        logger.warn('Sesión no válida al cargar componentes', { userId: user.id, error: errorMessage });
-        if (!options?.suppressErrorToast) {
-          toast.error(
-            'Sesión expirada',
-            'Vuelve a iniciar sesión para ver los componentes.',
-            { id: 'dashboard-load-components-auth' },
-          );
-        }
-        setComponents(null);
-        return;
-      }
-
-      if (isConnectionError(error)) {
-        logger.debug('Error de conexión al cargar componentes, se reintentará automáticamente', {
+      if (isUnauthorizedApiError(error) || isConnectionApiError(error)) {
+        logger.warn('Carga de componentes diferida (sesión o red)', {
           userId: user.id,
           error: errorMessage,
         });
-        return;
+      } else {
+        logger.error('Error loading components', { error, userId: user.id });
+        if (!options?.suppressErrorToast) {
+          toast.error(
+            'Error al cargar componentes',
+            'No se pudieron cargar los componentes. Por favor, intenta recargar la página.',
+            { id: 'dashboard-load-components-error' },
+          );
+        }
+        setComponents(null);
       }
-
-      logger.error('Error loading components', { error, userId: user.id });
-      if (!options?.suppressErrorToast) {
-        toast.error(
-          'Error al cargar componentes',
-          'No se pudieron cargar los componentes. Por favor, intenta recargar la página.',
-          { id: 'dashboard-load-components-error' },
-        );
-      }
-      setComponents(null);
     } finally {
       setIsLoading(false);
     }
@@ -169,8 +150,8 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
       setStats(statsData);
     } catch (error: any) {
       // Si el error es "Missing token", no loguear como error crítico
-      if (error?.message?.includes('Missing token') || error?.message?.includes('401')) {
-        logger.warn('Token not available for stats, will retry later', { userId: user.id });
+      if (isUnauthorizedApiError(error) || isConnectionApiError(error)) {
+        logger.warn('Estadísticas diferidas (sesión o red)', { userId: user.id });
       } else {
         logger.error('Error loading stats', { error, userId: user.id });
       }
@@ -189,7 +170,25 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
   useEffect(() => {
     if (!canAccessComponents) return;
-    void loadComponents();
+
+    let cancelled = false;
+
+    const boot = async () => {
+      try {
+        await getCurrentSessionUser();
+      } catch {
+        // La sesión puede establecerse en el siguiente intento
+      }
+      if (!cancelled) {
+        await loadComponents();
+      }
+    };
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+    };
   }, [canAccessComponents, loadComponents]);
 
   useVisibilityPolling(
@@ -219,18 +218,12 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
     setCurrentPage(1);
   }, []);
 
-  const prefetchComponentDetail = useCallback((componentId: string) => {
-    if (typeof window === 'undefined') return;
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = `/components/${componentId}`;
-    document.head.appendChild(link);
-  }, []);
+  const router = useRouter();
 
-  const resolveCompanyLabel = useCallback(
-    (component: Component) => resolveComponentCompanyName(component, companies),
-    [companies],
-  );
+  const prefetchComponentDetail = useCallback((componentId: string) => {
+    router.prefetch(`/components/${componentId}`);
+    void import('@/components/components/ComponentDetail');
+  }, [router]);
 
   const renderComponentListItem = useCallback((component: Component, options?: { showCompany?: boolean }) => {
     const showCompany = options?.showCompany ?? false;
@@ -254,7 +247,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
                 <Building2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="break-words">
-                  {resolveCompanyLabel(component)}
+                  {getCompanyLabel(component)}
                 </span>
               </div>
             )}
@@ -310,7 +303,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
               <div className="flex items-center text-sm">
                 <Building2 className="mr-1 h-4 w-4 text-muted-foreground" />
                 <span className="truncate">
-                  {resolveCompanyLabel(component)}
+                  {getCompanyLabel(component)}
                 </span>
               </div>
             </div>
@@ -342,7 +335,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
         </div>
       </div>
     );
-  }, [isMobileViewport, onComponentSelect, prefetchComponentDetail, resolveCompanyLabel]);
+  }, [getCompanyLabel, isMobileViewport, onComponentSelect, prefetchComponentDetail]);
 
   const componentsByCompany = useMemo(() => {
     if (!components?.data) return {};
@@ -375,9 +368,6 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
   return (
     <div className="app-shell min-h-screen">
-      <div className="mx-auto max-w-7xl px-3 pt-3 sm:px-6 lg:px-8">
-        <BrowserContextBanner />
-      </div>
       {/* Header */}
       <header role="banner" className="app-header sticky top-0 z-50 border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -656,9 +646,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
                                 <Building2 />
                               </div>
                               <div>
-                                <CardTitle className="text-lg">
-                                  {getCompanyNameFromCatalog(companyId, { companies })}
-                                </CardTitle>
+                                <CardTitle className="text-lg">{resolveCompanyName(companyId, companies)}</CardTitle>
                                 <p className="text-sm text-muted-foreground">
                                   {stats.total} componentes totales • {stats.inProgress} en proceso
                                 </p>

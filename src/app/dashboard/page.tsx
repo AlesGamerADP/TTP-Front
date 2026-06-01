@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { type Component, type User } from '@/lib/auth';
 import { useAuthStore } from '@/store/auth-store';
 import { logger } from '@/lib/logger';
-import { PageLoading } from '@/components/common/LoadingSpinner';
+import { DashboardSkeleton } from '@/components/common/LoadingStates';
 import { useAuthGate } from '@/features/auth/hooks/useAuthGate';
 import { DASHBOARD_PREFETCH_ROUTES } from '@/features/auth/constants';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
@@ -63,7 +63,7 @@ export default function DashboardPage() {
   };
 
   if (!sessionUser) {
-    return <PageLoading />;
+    return <DashboardSkeleton />;
   }
 
   const DashboardComponent = access.isBackoffice ? (
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <Suspense fallback={<PageLoading />}>
+    <Suspense fallback={<DashboardSkeleton />}>
       {DashboardComponent}
     </Suspense>
   );

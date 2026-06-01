@@ -9,7 +9,6 @@ import { login, type User } from '../../lib/auth';
 import { logger } from '../../lib/logger';
 import { Lock, Loader2, RefreshCw, User as UserIcon, KeyRound, Eye, EyeOff } from 'lucide-react';
 import TestCredentials from './TestCredentials';
-import { BrowserContextBanner } from '@/components/common/BrowserContextBanner';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { cn } from '../ui/utils';
 
@@ -110,8 +109,6 @@ export function LoginForm({ onLogin }: LoginFormProps) {
             Ingresa con tu código de usuario para acceder al sistema
           </p>
         </div>
-
-        <BrowserContextBanner className="mx-auto max-w-md" />
 
         <Card className="w-full max-w-md mx-auto shadow-lg border">
           <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4  ">
