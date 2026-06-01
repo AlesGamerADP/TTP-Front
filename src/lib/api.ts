@@ -1,17 +1,20 @@
 // API service para conectar con el backend
 import { logger } from './logger';
 
-function normalizeBaseUrl(url: string): string {
-  if (!url) return '';
-  return url === '/' ? '' : url.replace(/\/+$/, '');
-}
+import {
+  getApiProxyTarget,
+  normalizeApiBaseUrl,
+  shouldUseSameOriginApi,
+} from './api-config';
+
+export { getApiProxyTarget, normalizeApiBaseUrl, shouldUseSameOriginApi } from './api-config';
 
 // En AWS el navegador debe hablar con la misma origin pública (`/api`) y el SSR puede usar
 // una URL privada interna (`INTERNAL_API_URL`) para evitar salir por internet.
 const getApiBaseUrl = (): string => {
   const isServer = typeof window === 'undefined';
-  const publicUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
-  const internalUrl = normalizeBaseUrl(process.env.INTERNAL_API_URL || '');
+  const publicUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
+  const internalUrl = normalizeApiBaseUrl(process.env.INTERNAL_API_URL || '');
 
   if (isServer) {
     if (internalUrl) return internalUrl;
@@ -23,6 +26,11 @@ const getApiBaseUrl = (): string => {
     }
 
     throw new Error('Configura INTERNAL_API_URL o NEXT_PUBLIC_API_URL para el runtime del servidor.');
+  }
+
+  // Safari iOS bloquea cookies en fetch cross-site (front Vercel → API Render).
+  if (shouldUseSameOriginApi()) {
+    return '';
   }
 
   if (publicUrl) {
@@ -38,6 +46,17 @@ const getApiBaseUrl = (): string => {
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  const publicUrl = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || '');
+  if (publicUrl && !shouldUseSameOriginApi()) {
+    logger.warn(
+      'API cross-origin en producción: Safari/Firefox móvil pueden bloquear cookies. ' +
+        'Configura NEXT_PUBLIC_USE_SAME_ORIGIN_API=true e INTERNAL_API_URL en Vercel.',
+      { publicUrl },
+    );
+  }
+}
 
 export interface ApiError {
   error: string;

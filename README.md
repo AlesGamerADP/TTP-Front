@@ -128,8 +128,47 @@ Después de ejecutar el seed del backend:
 
 | Variable | Descripción | Requerido |
 |----------|-------------|-----------|
-| `NEXT_PUBLIC_API_URL` | URL del backend API | Sí |
+| `NEXT_PUBLIC_API_URL` | URL del backend API (local) o `/` en producción con proxy | Sí |
+| `INTERNAL_API_URL` | URL del backend para SSR y proxy en Vercel | Producción |
+| `NEXT_PUBLIC_USE_SAME_ORIGIN_API` | `true` para API vía mismo dominio (Safari móvil) | Producción Vercel |
 | `NEXT_PUBLIC_ENCRYPTION_KEY` | Clave para encriptar localStorage | Sí |
+
+## Compatibilidad entre navegadores
+
+Navegadores soportados (últimas 2 versiones estables):
+
+- Chrome / Edge (Chromium)
+- Firefox
+- Safari macOS e iOS
+
+### Producción (Vercel + backend externo)
+
+Para que la sesión funcione en **Safari iPhone** y Firefox móvil, el front no debe llamar al API en otro dominio desde el navegador. Configura en Vercel:
+
+```env
+NEXT_PUBLIC_USE_SAME_ORIGIN_API=true
+NEXT_PUBLIC_API_URL=/
+INTERNAL_API_URL=https://tu-backend.onrender.com
+```
+
+El front reenvía `/api/*` al backend (rewrite en `next.config.ts`). Tras el deploy, los usuarios deben **volver a iniciar sesión** en cada dispositivo.
+
+Sin `NEXT_PUBLIC_USE_SAME_ORIGIN_API=true`, Chrome en PC suele funcionar, pero Safari móvil puede mostrar el dashboard sin datos (cookies bloqueadas).
+
+### Desarrollo local
+
+Con front y back en `localhost` (mismo sitio efectivo para cookies), no hace falta el proxy; usa `NEXT_PUBLIC_API_URL=http://localhost:4000` como en `env.example`.
+
+### Safari, modo privado y WhatsApp
+
+| Contexto | Comportamiento |
+|----------|----------------|
+| Safari / Chrome normal | Sesión vía cookies httpOnly; caché local opcional |
+| Safari modo privado | `localStorage` puede fallar; login sigue si las cookies funcionan |
+| WhatsApp / Instagram in-app | Suele bloquear cookies; la app muestra aviso para abrir en Safari/Chrome |
+| WebView genérico | Mismo aviso; no se usa caché local sin validar `/api/users/me` |
+
+**Seguridad de localStorage:** no guarda contraseñas ni tokens. Solo perfil (nombre, rol, empresa). El cifrado AES con `NEXT_PUBLIC_ENCRYPTION_KEY` solo ofusca en el dispositivo; la clave está en el JavaScript público. **La autenticación real son las cookies httpOnly del backend.**
 
 ## Desarrollo
 

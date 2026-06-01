@@ -10,14 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
 import { ProgressTimeline } from './ProgressTimeline';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { LoadingSpinner } from '../common/LoadingSpinner';
+import { ComponentDetailShell } from './ComponentDetailShell';
+import { Skeleton } from '../ui/skeleton';
 import { useIsMobile } from '../ui/use-mobile';
 import dynamic from 'next/dynamic';
 
 // Lazy load componentes pesados - solo se cargan cuando se necesitan
 const TimelineManager = dynamic(() => import('@/features/components/views/TimelineManagerView'), {
-  loading: () => <div className="p-4 text-center text-sm text-muted-foreground">Cargando editor...</div>,
-  ssr: false
+  loading: () => <Skeleton className="h-32 w-full rounded-lg" />,
+  ssr: false,
 });
 import {
   ArrowLeft,
@@ -81,9 +82,11 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     events,
     documents,
     isLoading,
+    isLoadingDetails,
     reload,
   } = useComponentDetailData(componentId);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [historyTab, setHistoryTab] = useState('details');
 
   // Estados para previsualización de imágenes
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -153,18 +156,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     isDeleting,
   } = useComponentDetailActions({ componentId, reload, onBack });
 
-  if (isLoading) {
-    return (
-      <div className="app-shell flex min-h-screen items-center justify-center" role="status" aria-live="polite">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-pulse" aria-hidden="true" />
-            <h3 className="text-lg font-medium mb-4">Cargando componente...</h3>
-            <LoadingSpinner size="md" className="mx-auto" />
-          </CardContent>
-        </Card>
-      </div>
-    );
+  if (isLoading && !component) {
+    return <ComponentDetailShell onBack={onBack} />;
   }
 
   if (!component) {
@@ -324,20 +317,29 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
     <Card>
       <CardHeader>
         <CardTitle>Historial de Eventos</CardTitle>
-        <div className="mt-2 text-xs text-muted-foreground">
-          Total eventos: {sortedEvents.length} |
-          Eventos con fotos: {sortedEvents.filter(e => e.fotos && e.fotos.length > 0).length}
-        </div>
+        {!isLoadingDetails && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            Total eventos: {sortedEvents.length} |
+            Eventos con fotos: {sortedEvents.filter(e => e.fotos && e.fotos.length > 0).length}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue={isMobileViewport ? 'details' : 'timeline'} className="w-full">
+        {isLoadingDetails ? (
+          <div className="space-y-3" aria-busy="true" aria-label="Cargando historial">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        ) : (
+        <Tabs value={historyTab} onValueChange={setHistoryTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="timeline">Línea de Tiempo</TabsTrigger>
             <TabsTrigger value="details">Detalles</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="timeline" className="space-y-0 mt-6">
-            {sortedEvents.length === 0 ? (
+          <TabsContent value="timeline" className="mt-6 space-y-0">
+            {historyTab === 'timeline' && (sortedEvents.length === 0 ? (
               <div className="text-center py-12">
                 <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No hay eventos registrados</p>
@@ -442,11 +444,12 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   );
                 })}
               </div>
-            )}
+            ))}
           </TabsContent>
 
           <TabsContent value="details" className="space-y-4">
-            {groupedEvents.map((group) => {
+            {historyTab === 'details' &&
+            groupedEvents.map((group) => {
               const isMulti = group.events.length > 1;
               const singleEvent = group.events[0];
               return (
@@ -519,6 +522,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
             })}
           </TabsContent>
         </Tabs>
+        )}
       </CardContent>
     </Card>
   );

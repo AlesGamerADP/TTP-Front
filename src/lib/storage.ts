@@ -1,13 +1,17 @@
 /**
  * Sistema de almacenamiento híbrido
  * 
- * Estrategia:
- * - Cookies httpOnly: Tokens de autenticación (manejadas por el backend)
- * - localStorage: Datos del usuario que persisten entre sesiones
- * - sessionStorage: Datos temporales de la sesión actual
+ * Estrategia de seguridad:
+ * - Cookies httpOnly: ÚNICA fuente de verdad para autenticación (tokens; no legibles por JS)
+ * - localStorage: Caché opcional de perfil (nombre, rol, empresa) SIN contraseñas ni tokens.
+ *   Cifrado AES solo ofusca en el dispositivo; la clave está en el bundle del front.
+ * - sessionStorage: Estado UI temporal de la pestaña actual
  */
 
+import type { User } from '@/features/auth/model';
+import { isPersistentStorageAvailable, resetStorageAvailabilityCache } from './browser-context';
 import { logger } from './logger';
+import { mergeCachedUserProfile, toCachedUserProfile, type CachedUserProfile } from './user-cache';
 
 // ============================================
 // KEYS DE STORAGE
@@ -47,46 +51,61 @@ interface UIState {
 
 export const persistentStorage = {
   /**
-   * Guardar usuario en localStorage (encriptado)
+   * Guardar perfil en localStorage (opcional; no debe romper login si falla).
+   * @returns false si el almacenamiento no está disponible (modo privado, WebView, etc.)
    */
-  async saveUser(user: any): Promise<void> {
+  async saveUser(user: User): Promise<boolean> {
     try {
-      if (typeof window === 'undefined') return;
-      
+      if (typeof window === 'undefined') return false;
+      if (!isPersistentStorageAvailable()) {
+        logger.debug('localStorage no disponible; sesión solo en cookies/memoria', {
+          userId: user.id,
+        });
+        return false;
+      }
+
+      const profile = toCachedUserProfile(user);
       const { encrypt } = await import('./encryption');
-      const encryptedUser = await encrypt(JSON.stringify(user));
+      const encryptedUser = await encrypt(JSON.stringify(profile));
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, encryptedUser);
       localStorage.setItem(STORAGE_KEYS.LAST_LOGIN, new Date().toISOString());
-      
-      logger.debug('User saved to localStorage', { userId: user.id });
+
+      logger.debug('User profile cached in localStorage', { userId: user.id });
+      return true;
     } catch (error) {
-      logger.error('Failed to save user to localStorage', { error });
-      throw error;
+      resetStorageAvailabilityCache();
+      logger.warn('No se pudo guardar perfil en localStorage (no crítico)', {
+        error,
+        userId: user.id,
+      });
+      return false;
     }
   },
 
   /**
-   * Obtener usuario de localStorage
+   * Obtener perfil cacheado (solo UX; validar siempre con /api/users/me).
    */
-  async getUser(): Promise<any | null> {
+  async getUser(): Promise<User | null> {
     try {
       if (typeof window === 'undefined') return null;
-      
+      if (!isPersistentStorageAvailable()) return null;
+
       const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (!stored) return null;
-      
+
       try {
-        // Intentar desencriptar
         const { decrypt } = await import('./encryption');
         const decrypted = await decrypt(stored);
-        return JSON.parse(decrypted);
+        const parsed = JSON.parse(decrypted) as CachedUserProfile;
+        return mergeCachedUserProfile(parsed);
       } catch (decryptError) {
-        logger.error('Encrypted user payload could not be decrypted', { error: decryptError });
+        logger.warn('Caché de usuario ilegible; se elimina', { error: decryptError });
         this.removeUser();
         return null;
       }
     } catch (error) {
-      logger.error('Error loading user from localStorage', { error });
+      resetStorageAvailabilityCache();
+      logger.debug('Error loading user from localStorage', { error });
       return null;
     }
   },
@@ -110,10 +129,11 @@ export const persistentStorage = {
    */
   savePreferences(preferences: UserPreferences): void {
     try {
-      if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return;
       localStorage.setItem(STORAGE_KEYS.USER_PREFERENCES, JSON.stringify(preferences));
     } catch (error) {
-      logger.error('Failed to save preferences', { error });
+      resetStorageAvailabilityCache();
+      logger.debug('Failed to save preferences', { error });
     }
   },
 
@@ -122,7 +142,7 @@ export const persistentStorage = {
    */
   getPreferences(): UserPreferences | null {
     try {
-      if (typeof window === 'undefined') return null;
+      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return null;
       const stored = localStorage.getItem(STORAGE_KEYS.USER_PREFERENCES);
       return stored ? JSON.parse(stored) : null;
     } catch (error) {
@@ -136,7 +156,7 @@ export const persistentStorage = {
    */
   getLastLogin(): Date | null {
     try {
-      if (typeof window === 'undefined') return null;
+      if (typeof window === 'undefined' || !isPersistentStorageAvailable()) return null;
       const stored = localStorage.getItem(STORAGE_KEYS.LAST_LOGIN);
       return stored ? new Date(stored) : null;
     } catch (error) {
@@ -335,8 +355,13 @@ export function clearAllStorage(): void {
   persistentStorage.removeUser();
   sessionStorage.clearSession();
   if (typeof window !== 'undefined') {
-    localStorage.removeItem('auth-storage');
+    try {
+      localStorage.removeItem('auth-storage');
+    } catch {
+      /* modo privado / WebView */
+    }
   }
+  resetStorageAvailabilityCache();
   logger.info('All storage cleared');
 }
 

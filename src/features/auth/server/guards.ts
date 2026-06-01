@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
+import { shouldUseSameOriginApi } from '@/lib/api-config';
 
-export const usesSameOriginAuth =
-  !process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL === '/';
+export const usesSameOriginAuth = shouldUseSameOriginApi();
 
 type CookieSource =
   | NextRequest

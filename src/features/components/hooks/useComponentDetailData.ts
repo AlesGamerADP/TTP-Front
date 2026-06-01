@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Component, ComponentEvent } from '@/features/components/model';
-import { getComponentEventsQuery, getComponentQuery } from '@/features/components/queries';
-import { componentsApi } from '@/lib/api';
+import { getComponentDetailBundle } from '@/features/components/queries';
 import { logger } from '@/lib/logger';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 
@@ -20,30 +19,36 @@ export function useComponentDetailData(componentId: string) {
   const [component, setComponent] = useState<Component | undefined>(undefined);
   const [events, setEvents] = useState<ComponentEvent[]>([]);
   const [documents, setDocuments] = useState<ComponentDocumentRecord[]>([]);
+  /** Bloquea solo hasta tener datos mínimos del componente (título/header = LCP). */
   const [isLoading, setIsLoading] = useState(true);
+  /** Historial / documentos aún cargando (raro tras bundle unificado). */
+  const [isLoadingDetails, setIsLoadingDetails] = useState(true);
 
   const reload = useCallback(
     async (silent = false) => {
       if (!silent) {
         setIsLoading(true);
+        setIsLoadingDetails(true);
       }
 
       try {
-        const [componentData, eventsData, documentsData] = await Promise.all([
-          getComponentQuery(componentId),
-          getComponentEventsQuery(componentId),
-          componentsApi.getDocuments(componentId),
-        ]);
+        const bundle = await getComponentDetailBundle(componentId);
+        if (!bundle) {
+          setComponent(undefined);
+          setEvents([]);
+          setDocuments([]);
+          return;
+        }
 
-        const eventsArray = Array.isArray(eventsData) ? eventsData : [];
-        logger.debug('Eventos cargados', {
-          total: eventsArray.length,
-          eventosConFotos: eventsArray.filter((event) => event.fotos && event.fotos.length > 0).length,
+        setComponent(bundle.component);
+        setEvents(bundle.events);
+        setDocuments(bundle.documents);
+
+        logger.debug('Detalle de componente cargado', {
+          componentId,
+          events: bundle.events.length,
+          documents: bundle.documents.length,
         });
-
-        setComponent(componentData);
-        setEvents(eventsArray);
-        setDocuments(Array.isArray(documentsData.data) ? documentsData.data : []);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const isConnectionError =
@@ -52,7 +57,7 @@ export function useComponentDetailData(componentId: string) {
           (error instanceof Error && error.name === 'TypeError');
 
         if (isConnectionError) {
-          logger.debug('Error de conexión al cargar datos del componente, se reintentará automáticamente', {
+          logger.debug('Error de conexión al cargar detalle, se reintentará', {
             componentId,
             error: errorMessage,
           });
@@ -65,6 +70,7 @@ export function useComponentDetailData(componentId: string) {
       } finally {
         if (!silent) {
           setIsLoading(false);
+          setIsLoadingDetails(false);
         }
       }
     },
@@ -75,15 +81,14 @@ export function useComponentDetailData(componentId: string) {
     void reload();
   }, [reload]);
 
-  useVisibilityPolling(
-    () => reload(true),
-  );
+  useVisibilityPolling(() => reload(true));
 
   return {
     component,
     events,
     documents,
     isLoading,
+    isLoadingDetails,
     reload,
   };
 }

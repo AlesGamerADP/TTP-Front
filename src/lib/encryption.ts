@@ -1,5 +1,6 @@
-// Cifrado de datos en localStorage (Web Crypto API)
-// La clave se inyecta en build time vía NEXT_PUBLIC_ENCRYPTION_KEY
+// Ofuscación del perfil en localStorage (Web Crypto API).
+// NO es seguridad real: NEXT_PUBLIC_ENCRYPTION_KEY va en el bundle del navegador.
+// La autenticación depende de cookies httpOnly del backend, no de este cifrado.
 
 function resolveEncryptionKey(): string {
   const envKey = process.env.NEXT_PUBLIC_ENCRYPTION_KEY?.trim();

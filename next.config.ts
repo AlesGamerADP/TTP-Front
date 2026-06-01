@@ -1,7 +1,14 @@
 import path from 'path';
 import type { NextConfig } from "next";
+import { getApiProxyTarget, shouldUseSameOriginApi } from './src/lib/api-config';
 
-const publicApiOrigin = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+const publicApiOrigin = (() => {
+  if (shouldUseSameOriginApi()) {
+    return '';
+  }
+  return (process.env.NEXT_PUBLIC_API_URL || '').trim();
+})();
+const apiProxyTarget = getApiProxyTarget();
 const outputMode = (process.env.NEXT_OUTPUT_MODE || '').trim();
 const connectSrc = [
   "'self'",
@@ -90,6 +97,19 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   
+  async rewrites() {
+    if (!shouldUseSameOriginApi() || !apiProxyTarget) {
+      return [];
+    }
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiProxyTarget}/api/:path*`,
+      },
+    ];
+  },
+
   // Headers de seguridad y optimización
   async headers() {
     return [

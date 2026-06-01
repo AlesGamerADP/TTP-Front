@@ -45,9 +45,12 @@ import { getRoleLabel, shouldShowRoleBadge } from '../../lib/user-display';
 import { useIsMobile } from '../ui/use-mobile';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
 import { getCompanyNameFromCatalog, resolveComponentCompanyName } from '@/features/companies/catalog';
+import { authApi } from '@/lib/api';
+import { isAuthError, isConnectionError } from '@/lib/api-errors';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { BrowserContextBanner } from '@/components/common/BrowserContextBanner';
 
 const UserManagement = dynamic(() => import('../management/UserManagement'), {
   loading: () => (
@@ -93,10 +96,9 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
 
-  const loadComponents = useCallback(async (options?: { suppressErrorToast?: boolean }) => {
+  const loadComponents = useCallback(async (options?: { suppressErrorToast?: boolean; retryAuth?: boolean }) => {
     setIsLoading(true);
     try {
-      // Las cookies httpOnly se envían automáticamente, no necesitamos verificarlas
       const response = await getComponentsPaginated({
         page: currentPage,
         limit: itemsPerPage,
@@ -110,34 +112,51 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
         total: response.pagination.total
       });
       setComponents(response);
-    } catch (error: any) {
-      const errorMessage = error?.message || String(error);
-      const isConnectionError = 
-        errorMessage?.includes('No se pudo conectar') ||
-        errorMessage?.includes('Failed to fetch') ||
-        error?.name === 'TypeError';
-      
-      // Si el error es "Missing token", no loguear como error crítico
-      if (error?.message?.includes('Missing token') || error?.message?.includes('401')) {
-        logger.warn('Token not available for components, will retry later', { userId: user.id });
-      } else if (isConnectionError) {
-        // Errores de conexión: solo loguear en debug y no mostrar toast (evitar spam)
-        logger.debug('Error de conexión al cargar componentes, se reintentará automáticamente', { 
-          userId: user.id,
-          error: errorMessage,
-        });
-        // No mostrar toast ni limpiar componentes para evitar interrupciones
-      } else {
-        logger.error('Error loading components', { error, userId: user.id });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (isAuthError(error)) {
+        if (options?.retryAuth !== false) {
+          try {
+            await authApi.refresh();
+            return loadComponents({ ...options, retryAuth: false });
+          } catch (refreshError) {
+            logger.warn('No se pudo renovar la sesión al cargar componentes', {
+              userId: user.id,
+              refreshError,
+            });
+          }
+        }
+
+        logger.warn('Sesión no válida al cargar componentes', { userId: user.id, error: errorMessage });
         if (!options?.suppressErrorToast) {
           toast.error(
-            'Error al cargar componentes',
-            'No se pudieron cargar los componentes. Por favor, intenta recargar la página.',
-            { id: 'dashboard-load-components-error' },
+            'Sesión expirada',
+            'Vuelve a iniciar sesión para ver los componentes.',
+            { id: 'dashboard-load-components-auth' },
           );
         }
         setComponents(null);
+        return;
       }
+
+      if (isConnectionError(error)) {
+        logger.debug('Error de conexión al cargar componentes, se reintentará automáticamente', {
+          userId: user.id,
+          error: errorMessage,
+        });
+        return;
+      }
+
+      logger.error('Error loading components', { error, userId: user.id });
+      if (!options?.suppressErrorToast) {
+        toast.error(
+          'Error al cargar componentes',
+          'No se pudieron cargar los componentes. Por favor, intenta recargar la página.',
+          { id: 'dashboard-load-components-error' },
+        );
+      }
+      setComponents(null);
     } finally {
       setIsLoading(false);
     }
@@ -356,6 +375,9 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
   return (
     <div className="app-shell min-h-screen">
+      <div className="mx-auto max-w-7xl px-3 pt-3 sm:px-6 lg:px-8">
+        <BrowserContextBanner />
+      </div>
       {/* Header */}
       <header role="banner" className="app-header sticky top-0 z-50 border-b">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
