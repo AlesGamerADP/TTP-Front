@@ -1,18 +1,6 @@
 import { appendAccessTokenToUrl, getAccessToken } from './auth-token';
-import { isBrowserApiProxied, resolveApiUrl } from './api-config';
+import { resolveApiUrl } from './api-config';
 import { logger } from './logger';
-
-const PHOTO_API_PATH = '/api/components/_photos/';
-
-async function ensureAccessTokenForMedia(): Promise<void> {
-  if (getAccessToken()) return;
-  try {
-    const { authApi } = await import('./api');
-    await authApi.refresh();
-  } catch {
-    logger.debug('No se pudo obtener accessToken para medios (puede usar cookies same-origin)');
-  }
-}
 
 export function isSameOriginMediaUrl(url: string): boolean {
   if (typeof window === 'undefined') return true;
@@ -51,15 +39,11 @@ export async function fetchAuthenticatedBlob(
   if (expectedType) {
     (headers as Record<string, string>)['Accept'] = `${expectedType}, */*`;
   }
-  if (isBrowserApiProxied() && isSameOriginMediaUrl(resolved)) {
-    (headers as Record<string, string>)['Accept-Encoding'] = 'identity';
-  }
 
-  const sameOrigin = isSameOriginMediaUrl(resolved);
   const response = await fetch(fetchUrl, {
     method: 'GET',
     credentials: 'include',
-    mode: sameOrigin ? 'same-origin' : 'cors',
+    mode: 'cors',
     headers,
   });
 
@@ -89,34 +73,12 @@ export async function fetchAuthenticatedBlob(
   return new Blob([await blob.arrayBuffer()], { type: contentType });
 }
 
-/**
- * URL para <img>: la API propia admite ?accessToken= (sin preflight CORS).
- * El fetch+blob solo se usa como respaldo o para URLs externas sin token.
- */
+/** URL lista para <img> o fetch según origen (Cloudinary, API propia, etc.). */
 export async function resolvePhotoPreviewUrl(photoPath: string): Promise<string> {
   const { componentsApi } = await import('./api');
   const url = componentsApi.getPhotoUrl(photoPath, { size: 'full' });
   if (!url) {
     throw new Error('Ruta de foto vacía');
-  }
-
-  const isApiPhoto = url.includes(PHOTO_API_PATH);
-  const isPublicCdn =
-    (url.startsWith('https://') || url.startsWith('http://')) && !isApiPhoto;
-
-  if (isPublicCdn) {
-    return url;
-  }
-
-  if (isApiPhoto || url.includes('/api/components/_docs/')) {
-    await ensureAccessTokenForMedia();
-    const authedUrl = appendAccessTokenToUrl(url);
-    // CSP img-src solo permite 'self' en el mismo puerto; en dev (3000→4000) usar blob:
-    if (!isSameOriginMediaUrl(authedUrl)) {
-      const blob = await fetchAuthenticatedBlob(authedUrl, 'image/*');
-      return URL.createObjectURL(blob);
-    }
-    return authedUrl;
   }
 
   if (isSameOriginMediaUrl(url)) {
@@ -127,20 +89,15 @@ export async function resolvePhotoPreviewUrl(photoPath: string): Promise<string>
   return URL.createObjectURL(blob);
 }
 
-/** Carga la foto vía fetch (cookies / CORS) si falla el <img> directo. */
-export async function fetchPhotoPreviewBlobUrl(photoUrl: string): Promise<string> {
-  const blob = await fetchAuthenticatedBlob(photoUrl, 'image/*');
-  return URL.createObjectURL(blob);
-}
-
-/** URL para visor PDF (<iframe> / <object>). Usa blob si el API es otro origen (CSP frame-src). */
+/** URL lista para visor PDF (<iframe> / <object>). */
 export async function resolvePdfPreviewUrl(docId: string): Promise<string> {
-  await ensureAccessTokenForMedia();
-  const authedUrl = appendAccessTokenToUrl(getDocumentDownloadUrl(docId));
-  if (isSameOriginMediaUrl(authedUrl)) {
-    return authedUrl;
+  const directUrl = getDocumentDownloadUrl(docId);
+
+  if (isSameOriginMediaUrl(directUrl)) {
+    return appendAccessTokenToUrl(directUrl);
   }
-  const blob = await fetchAuthenticatedBlob(authedUrl, 'application/pdf');
+
+  const blob = await fetchAuthenticatedBlob(directUrl, 'application/pdf');
   return URL.createObjectURL(blob);
 }
 

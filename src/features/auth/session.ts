@@ -1,4 +1,6 @@
 import { authApi, usersApi } from '@/lib/api';
+import { isAuthError, isConnectionError } from '@/lib/api-errors';
+import { getBrowserContextInfo } from '@/lib/browser-context';
 import { logger } from '@/lib/logger';
 import { normalizeUserRole } from '@/lib/roles';
 import type { User } from './model';
@@ -38,32 +40,23 @@ function mapBackendUser(backendUser: BackendUserRecord): User {
   };
 }
 
+async function cacheUserProfile(user: User): Promise<void> {
+  const { persistentStorage, sessionStorage } = await import('@/lib/storage');
+  await persistentStorage.saveUser(user);
+  sessionStorage.initSession();
+}
+
 export async function loginSession(codigo: string, password: string): Promise<User | null> {
-  try {
-    const response = await authApi.login(codigo, password);
-    const user = mapBackendUser(response.user as BackendUserRecord);
+  const response = await authApi.login(codigo, password);
+  const user = mapBackendUser(response.user as BackendUserRecord);
 
-    logger.info('Login attempt successful', { codigo, userId: user.id, role: user.role });
-    currentUser = user;
+  logger.info('Login attempt successful', { codigo, userId: user.id, role: user.role });
+  currentUser = user;
 
-    const { sessionStorage, persistentStorage } = await import('@/lib/storage');
-    sessionStorage.initSession();
-    persistentStorage.removeLegacyUserCache();
+  // No fallar el login si localStorage no está disponible (Safari privado, WebViews)
+  await cacheUserProfile(user);
 
-    return user;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.warn('Login attempt failed', {
-      codigo,
-      error: errorMessage,
-      errorType: error instanceof Error ? error.name : undefined,
-      errorDetails:
-        error instanceof Error
-          ? { message: error.message, name: error.name, stack: error.stack }
-          : error,
-    });
-    throw error;
-  }
+  return user;
 }
 
 export async function logoutSession(): Promise<void> {
@@ -77,6 +70,8 @@ export async function logoutSession(): Promise<void> {
   }
 
   const { clearAllStorage, cookieStorage } = await import('@/lib/storage');
+  const { setAccessToken } = await import('@/lib/auth-token');
+  setAccessToken(null);
   clearAllStorage();
   cookieStorage.invalidateCache();
 
@@ -91,33 +86,48 @@ export async function getCurrentSessionUser(): Promise<User | null> {
     return null;
   }
 
-  try {
-    const { cookieStorage, persistentStorage } = await import('@/lib/storage');
-    persistentStorage.removeLegacyUserCache();
+  const { persistentStorage, cookieStorage } = await import('@/lib/storage');
+  const browserContext = getBrowserContextInfo();
 
+  try {
+    // Fuente de verdad: cookies httpOnly validadas en el servidor
     const response = await usersApi.getMe();
     const user = mapBackendUser(response.data as BackendUserRecord);
 
     currentUser = user;
+    await cacheUserProfile(user);
     cookieStorage.invalidateCache();
     logger.debug('User restored from backend session', { userId: user.id });
     return currentUser;
   } catch (sessionError) {
-    logger.debug('No active backend session', { error: sessionError });
-    currentUser = null;
+    if (isAuthError(sessionError)) {
+      logger.warn('Sesión inválida en el servidor, limpiando caché local', {
+        error: sessionError instanceof Error ? sessionError.message : sessionError,
+      });
+      persistentStorage.removeUser();
+      currentUser = null;
+      cookieStorage.invalidateCache();
+      return null;
+    }
 
-    const status = (sessionError as Error & { status?: number }).status;
-    if (status === 401) {
-      try {
-        await authApi.logout();
-      } catch {
-        // Ignorar: solo intentamos limpiar cookies caducadas en el cliente
+    if (isConnectionError(sessionError) && !browserContext.isRestrictedSessionContext) {
+      const cachedUser = await persistentStorage.getUser();
+      if (cachedUser) {
+        currentUser = {
+          ...cachedUser,
+          role: normalizeUserRole(cachedUser.role),
+        };
+        logger.debug('Usando perfil en caché por error de red (sin validar cookies)', {
+          userId: currentUser.id,
+        });
+        return currentUser;
       }
     }
 
-    const { cookieStorage } = await import('@/lib/storage');
+    logger.debug('No active backend session', { error: sessionError });
     cookieStorage.invalidateCache();
   }
 
   return null;
 }
+
