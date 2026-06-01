@@ -7,6 +7,7 @@ import { componentsApi } from '@/lib/api';
 import { isConnectionApiError } from '@/lib/api-errors';
 import { logger } from '@/lib/logger';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
+import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
 
 export interface ComponentDocumentRecord {
   id: string;
@@ -88,6 +89,13 @@ export function useComponentDetailData(componentId: string) {
   }, [reload]);
 
   useVisibilityPolling(() => reload(true));
+
+  useComponentRealtime({
+    componentId,
+    onEvent: () => {
+      void reload(true);
+    },
+  });
 
   return {
     component,

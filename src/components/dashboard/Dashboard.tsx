@@ -38,6 +38,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { logger } from '../../lib/logger';
 import { getRoleLabel, shouldShowRoleBadge } from '../../lib/user-display';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
+import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
@@ -176,6 +177,15 @@ export function Dashboard({ user, onLogout, onComponentSelect }: DashboardProps)
         loadStats(),
       ]).then(() => undefined),
   );
+
+  useComponentRealtime({
+    onEvent: () => {
+      void Promise.all([
+        loadComponents({ suppressErrorToast: true }),
+        loadStats(),
+      ]);
+    },
+  });
 
   useEffect(() => {
     if (currentPage !== 1) {

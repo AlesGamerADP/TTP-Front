@@ -8,8 +8,8 @@ export interface CreateUserInput {
 }
 
 export interface UpdateUserInput {
-  email?: string;
-  full_name?: string;
+  email: string;
+  full_name: string;
   role?: string;
   company_id?: string;
   access_code?: string;

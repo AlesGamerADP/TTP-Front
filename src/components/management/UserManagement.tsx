@@ -162,15 +162,34 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     if (!selectedUser) return;
 
     try {
-      const email = formData.email.trim();
-      if (!email) {
-        toast.error('El correo electrónico es obligatorio');
+      // Validaciones
+      if (!formData.email || !formData.full_name) {
+        toast.error('Por favor complete todos los campos obligatorios');
         return;
       }
 
-      // Tras el registro solo se permite cambiar el email
-      const updateData: UpdateUserInput = { email };
+      // Preparar datos para el backend
+      const updateData: UpdateUserInput = {
+        email: formData.email.trim(),
+        full_name: formData.full_name.trim(),
+      };
 
+      // Solo incluir role si el usuario tiene permisos para cambiarlo
+      if (canEditUserRole()) {
+        updateData.role = toApiUserRole(formData.role);
+      }
+
+      // Solo incluir company_id si está presente y no está vacío
+      if (normalizeOptionalString(formData.company_id)) {
+        updateData.company_id = formData.company_id.trim();
+      }
+
+      // Solo incluir access_code si está presente y no está vacío
+      if (normalizeOptionalString(formData.access_code)) {
+        updateData.access_code = formData.access_code.trim();
+      }
+
+      // Llamar al API para actualizar el usuario
       await updateUserMutation(selectedUser.id, updateData);
 
       toast.success('Usuario actualizado exitosamente');
@@ -291,6 +310,14 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     }
     
     return false;
+  };
+
+  const canEditUserRole = (): boolean => {
+    // User manager NO puede cambiar el rol de usuarios (solo admin puede)
+    if (currentUser.role === 'user_manager') {
+      return false;
+    }
+    return currentUser.role === 'admin';
   };
 
   const renderUserMobileCard = (user: User) => {
@@ -450,98 +477,93 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     </div>
   );
 
-  const roleDisplayLabels: Record<string, string> = {
-    admin: 'Administrador',
-    user_manager: 'Gestor de Usuarios',
-    client: 'Acceso Cliente',
-    interno: 'Acceso Interno',
-  };
+  const renderEditUserFields = () => (
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label htmlFor="edit_full_name">Nombre Completo *</Label>
+        <Input
+          id="edit_full_name"
+          value={formData.full_name}
+          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+          className={emphasizedFieldClassName}
+          style={emphasizedFieldStyle}
+        />
+      </div>
 
-  const readOnlyFieldClassName = cn(emphasizedFieldClassName, 'cursor-not-allowed opacity-80');
+      <div className="space-y-2">
+        <Label htmlFor="edit_email">Email *</Label>
+        <Input
+          id="edit_email"
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          className={emphasizedFieldClassName}
+          style={emphasizedFieldStyle}
+        />
+      </div>
 
-  const renderEditUserFields = () => {
-    const companyName =
-      selectedUser?.company?.name ||
-      companies.find((company) => company.id === formData.company_id)?.name ||
-      '—';
-
-    return (
-      <div className="space-y-4 py-4">
-        <p className="text-sm text-muted-foreground">
-          El nombre, tipo de usuario, empresa y código de acceso no se pueden modificar después del
-          registro. Solo puedes actualizar el correo electrónico.
-        </p>
-
-        <div className="space-y-2">
-          <Label htmlFor="edit_full_name">Nombre Completo</Label>
-          <Input
-            id="edit_full_name"
-            value={formData.full_name}
-            readOnly
-            disabled
-            aria-readonly="true"
-            className={readOnlyFieldClassName}
-            style={emphasizedFieldStyle}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="edit_email">Email *</Label>
-          <Input
-            id="edit_email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className={emphasizedFieldClassName}
-            style={emphasizedFieldStyle}
-          />
-        </div>
-
+      {selectedUser && canEditUserRole() && (
         <div className="space-y-2">
           <Label htmlFor="edit_role">Tipo de Usuario</Label>
-          <Input
-            id="edit_role"
-            value={roleDisplayLabels[formData.role] || formData.role}
-            readOnly
-            disabled
-            aria-readonly="true"
-            className={readOnlyFieldClassName}
-            style={emphasizedFieldStyle}
-          />
+          <Select
+            value={formData.role}
+            onValueChange={(value: UserRole) => {
+              setFormData({ ...formData, role: value, company_id: '', access_code: '' });
+            }}
+          >
+            <SelectTrigger className={emphasizedFieldClassName} style={emphasizedFieldStyle}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {currentUser.role === 'admin' && (
+                <>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="user_manager">Gestor de Usuarios</SelectItem>
+                </>
+              )}
+              <SelectItem value="interno">Acceso Interno</SelectItem>
+              <SelectItem value="client">Acceso Cliente</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+      )}
 
-        {formData.role === 'client' && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="edit_company">Empresa</Label>
-              <Input
-                id="edit_company"
-                value={companyName}
-                readOnly
-                disabled
-                aria-readonly="true"
-                className={readOnlyFieldClassName}
-                style={emphasizedFieldStyle}
-              />
-            </div>
+      {formData.role === 'client' && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="edit_company">Empresa</Label>
+            <Select
+              value={formData.company_id}
+              onValueChange={(value) => setFormData({ ...formData, company_id: value })}
+            >
+              <SelectTrigger className={emphasizedFieldClassName} style={emphasizedFieldStyle}>
+                <SelectValue placeholder="Seleccione empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="edit_access_code">Código de Acceso</Label>
-              <Input
-                id="edit_access_code"
-                value={formData.access_code}
-                readOnly
-                disabled
-                aria-readonly="true"
-                className={readOnlyFieldClassName}
-                style={emphasizedFieldStyle}
-              />
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
+          <div className="space-y-2">
+            <Label htmlFor="edit_access_code">Código de Acceso</Label>
+            <Input
+              id="edit_access_code"
+              value={formData.access_code}
+              onChange={(e) => setFormData({ ...formData, access_code: e.target.value })}
+              placeholder="Ej: EJ001"
+              className={emphasizedFieldClassName}
+              style={emphasizedFieldStyle}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   const handleGenerateCredentialsPassword = () => {
     setCredentialsPassword(
@@ -821,7 +843,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
             <DialogHeader>
               <DialogTitle>Editar Usuario</DialogTitle>
               <DialogDescription>
-                Solo el correo electrónico puede modificarse después del registro.
+                Actualizar información del usuario
               </DialogDescription>
             </DialogHeader>
             {renderEditUserFields()}
@@ -839,7 +861,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
             <DialogHeader>
               <DialogTitle>Editar Usuario</DialogTitle>
               <DialogDescription>
-                Solo el correo electrónico puede modificarse después del registro.
+                Actualizar información del usuario
               </DialogDescription>
             </DialogHeader>
             {renderEditUserFields()}

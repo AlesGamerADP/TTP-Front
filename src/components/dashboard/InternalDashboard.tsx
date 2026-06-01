@@ -50,6 +50,7 @@ import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCata
 import { resolveCompanyName } from '@/features/companies/catalog';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
+import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 const UserManagement = dynamic(() => import('../management/UserManagement'), {
@@ -201,6 +202,16 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
       enabled: canAccessComponents,
     },
   );
+
+  useComponentRealtime({
+    enabled: canAccessComponents,
+    onEvent: () => {
+      void Promise.all([
+        loadComponents({ suppressErrorToast: true }),
+        loadStats(),
+      ]);
+    },
+  });
 
   useEffect(() => {
     if (!canAccessComponents) return;

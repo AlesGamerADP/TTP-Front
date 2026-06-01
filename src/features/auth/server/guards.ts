@@ -1,9 +1,7 @@
 import type { NextRequest } from 'next/server';
+import { usesBrowserApiProxy } from '@/lib/api-config';
 
-export const usesSameOriginAuth =
-  process.env.NEXT_PUBLIC_API_PROXY === 'true' ||
-  !process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL === '/';
+export const usesSameOriginAuth = usesBrowserApiProxy();
 
 type CookieSource =
   | NextRequest

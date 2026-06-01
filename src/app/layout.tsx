@@ -8,7 +8,8 @@ import { defaultMetadata } from '@/lib/metadata';
 import { OrganizationSchema, WebApplicationSchema } from '@/components/seo/StructuredData';
 import { ResourceHints } from '@/components/seo/ResourceHints';
 import { StorageInitializer } from '@/components/common/StorageInitializer';
-import { usesBrowserApiProxy } from '@/lib/api';
+import { ComponentRealtimeConnection } from '@/features/components/realtime/ComponentRealtimeConnection';
+import { usesBrowserApiProxy } from '@/lib/api-config';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeMeta />
           <ErrorBoundaryWrapper>
             <StorageInitializer />
+            <ComponentRealtimeConnection />
             {/* Skip to main content link for accessibility */}
             <a 
               href="#main-content" 
