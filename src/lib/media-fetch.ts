@@ -1,111 +1,56 @@
 import { appendAccessTokenToUrl, getAccessToken } from './auth-token';
 import { resolveApiUrl } from './api-config';
-import { logger } from './logger';
 
-export function isSameOriginMediaUrl(url: string): boolean {
-  if (typeof window === 'undefined') return true;
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return true;
+export type FetchMediaOptions = RequestInit & {
+  /** Si true, añade accessToken en query cuando exista (fotos/docs). */
+  withQueryToken?: boolean;
+};
+
+/**
+ * Descarga binaria autenticada (fotos, PDFs).
+ * Usa cookies same-origin y/o Bearer / ?accessToken= según FRONTEND_AUTH.md.
+ */
+export async function fetchAuthenticatedMedia(
+  pathOrUrl: string,
+  options: FetchMediaOptions = {},
+): Promise<Response> {
+  const { withQueryToken = true, ...init } = options;
+
+  let url = resolveApiUrl(pathOrUrl);
+  if (withQueryToken) {
+    url = appendAccessTokenToUrl(url);
   }
-  try {
-    return new URL(url).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
 
-export function getDocumentDownloadUrl(docId: string): string {
-  return resolveApiUrl(`/api/components/_docs/${docId}/download`);
-}
-
-function buildMediaAuthHeaders(): HeadersInit {
-  const headers: HeadersInit = {
-    Accept: '*/*',
-  };
+  const headers = new Headers(init.headers);
   const token = getAccessToken();
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
   }
-  return headers;
+
+  if (!headers.has('Accept')) {
+    headers.set('Accept', '*/*');
+  }
+
+  return fetch(url, {
+    ...init,
+    method: init.method ?? 'GET',
+    credentials: init.credentials ?? 'include',
+    headers,
+  });
 }
 
 export async function fetchAuthenticatedBlob(
-  url: string,
-  expectedType?: string,
+  pathOrUrl: string,
+  options?: FetchMediaOptions,
 ): Promise<Blob> {
-  const resolved = url.startsWith('http') ? url : resolveApiUrl(url);
-  const fetchUrl = appendAccessTokenToUrl(resolved);
-  const headers = buildMediaAuthHeaders();
-  if (expectedType) {
-    (headers as Record<string, string>)['Accept'] = `${expectedType}, */*`;
-  }
-
-  const response = await fetch(fetchUrl, {
-    method: 'GET',
-    credentials: 'include',
-    mode: 'cors',
-    headers,
-  });
-
+  const response = await fetchAuthenticatedMedia(pathOrUrl, options);
   if (!response.ok) {
-    let message = `Error ${response.status}`;
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        message?: string;
-      };
-      message = data.error || data.message || message;
-    }
-    throw new Error(message);
+    throw new Error(`Media fetch failed: HTTP ${response.status}`);
   }
-
-  const contentType =
-    response.headers.get('content-type')?.split(';')[0]?.trim() ||
-    expectedType ||
-    'application/octet-stream';
-  const blob = await response.blob();
-
-  if (blob.type && blob.type !== 'application/octet-stream') {
-    return blob;
-  }
-
-  return new Blob([await blob.arrayBuffer()], { type: contentType });
+  return response.blob();
 }
 
-/** URL lista para <img> o fetch según origen (Cloudinary, API propia, etc.). */
-export async function resolvePhotoPreviewUrl(photoPath: string): Promise<string> {
-  const { componentsApi } = await import('./api');
-  const url = componentsApi.getPhotoUrl(photoPath, { size: 'full' });
-  if (!url) {
-    throw new Error('Ruta de foto vacía');
-  }
-
-  if (isSameOriginMediaUrl(url)) {
-    return appendAccessTokenToUrl(url);
-  }
-
-  const blob = await fetchAuthenticatedBlob(url, 'image/*');
-  return URL.createObjectURL(blob);
-}
-
-/** URL lista para visor PDF (<iframe> / <object>). */
-export async function resolvePdfPreviewUrl(docId: string): Promise<string> {
-  const directUrl = getDocumentDownloadUrl(docId);
-
-  if (isSameOriginMediaUrl(directUrl)) {
-    return appendAccessTokenToUrl(directUrl);
-  }
-
-  const blob = await fetchAuthenticatedBlob(directUrl, 'application/pdf');
-  return URL.createObjectURL(blob);
-}
-
-export function revokeBlobUrlIfNeeded(url: string | null): void {
-  if (!url?.startsWith('blob:')) return;
-  try {
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    logger.debug('No se pudo revocar blob URL', { error });
-  }
+/** URL resuelta para src/href (con token en query si aplica). */
+export function resolveAuthenticatedMediaUrl(pathOrUrl: string): string {
+  return appendAccessTokenToUrl(resolveApiUrl(pathOrUrl));
 }
