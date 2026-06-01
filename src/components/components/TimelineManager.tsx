@@ -38,14 +38,14 @@ import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useUsersCatalog } from '@/features/users/hooks/useUsersCatalog';
 import type { ComponentDocumentRecord } from '@/features/components/hooks/useComponentDetailData';
 import { submitTimelineUpdate } from '@/features/components/use-cases/submitTimelineUpdate';
+import { compressImageForUpload } from '@/lib/compress-image';
 
 interface TimelineManagerProps {
   componentId: string;
   currentUser: User;
   events: ComponentEvent[];
   documents?: ComponentDocumentRecord[];
-  onEventAdded: (event: ComponentEvent) => void;
-  onStatusUpdated: (newStatus: ComponentStatus) => void;
+  onSaved: () => Promise<void> | void;
   currentStatus: ComponentStatus;
 }
 
@@ -54,9 +54,8 @@ export function TimelineManager({
   currentUser,
   events, 
   documents = [],
-  onEventAdded, 
-  onStatusUpdated, 
-  currentStatus 
+  onSaved,
+  currentStatus,
 }: TimelineManagerProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showAllRecentEvents, setShowAllRecentEvents] = useState(false);
@@ -109,7 +108,7 @@ export function TimelineManager({
 
   const nextStatus = getNextStatus(currentStatus);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const newPhotos = Array.from(files);
@@ -132,11 +131,20 @@ export function TimelineManager({
         logger.warn('No hay fotos válidas para agregar');
         return;
       }
+
+      const compressedPhotos = await Promise.all(
+        validPhotos.map((photo) => compressImageForUpload(photo)),
+      );
+
+      logger.debug('Fotos preparadas para subida', {
+        beforeBytes: validPhotos.reduce((sum, f) => sum + f.size, 0),
+        afterBytes: compressedPhotos.reduce((sum, f) => sum + f.size, 0),
+      });
       
-      setEventPhotos((prev) => [...prev, ...validPhotos]);
+      setEventPhotos((prev) => [...prev, ...compressedPhotos]);
 
       // Crear data URLs para mini-previsualización (sin visor grande)
-      validPhotos.forEach((photo) => {
+      compressedPhotos.forEach((photo) => {
         const reader = new FileReader();
 
         reader.onload = (event) => {
@@ -272,8 +280,7 @@ export function TimelineManager({
         eventPhotos,
         eventFiles,
         createdBy: currentUser.id,
-        onEventAdded,
-        onStatusUpdated,
+        onSaved,
       });
 
       logger.debug('Estado actualizado exitosamente', { componentId, newStatus: selectedStatus });
@@ -300,7 +307,7 @@ export function TimelineManager({
         componentId,
         selectedStatus,
       });
-      // El error ya se maneja en handleEventAdded y handleStatusUpdated con toasts
+      // El error ya se maneja en onSaved con toast
     } finally {
       setIsSubmitting(false);
     }

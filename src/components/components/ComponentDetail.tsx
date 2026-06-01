@@ -276,8 +276,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
   const canDelete = access.canEditTimeline;
   const {
     handleDelete,
-    handleEventAdded,
-    handleStatusUpdated,
+    handleTimelineSaved,
     isDeleting,
   } = useComponentDetailActions({ componentId, reload, onBack });
 
@@ -788,8 +787,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 events={events}
                 documents={documents}
                 currentStatus={component.estado}
-                onEventAdded={handleEventAdded}
-                onStatusUpdated={handleStatusUpdated}
+                onSaved={handleTimelineSaved}
               />
             )}
           </div>

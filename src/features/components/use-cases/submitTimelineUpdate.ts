@@ -1,4 +1,4 @@
-import type { ComponentEvent, ComponentStatus } from '@/features/components/model';
+import type { ComponentStatus } from '@/features/components/model';
 import { addComponentEventMutation } from '@/features/components/mutations';
 
 interface SubmitTimelineUpdateInput {
@@ -8,8 +8,8 @@ interface SubmitTimelineUpdateInput {
   eventPhotos: File[];
   eventFiles: File[];
   createdBy: string;
-  onEventAdded: (event: ComponentEvent) => Promise<void> | void;
-  onStatusUpdated: (newStatus: ComponentStatus) => Promise<void> | void;
+  /** Tras guardar en servidor: una sola recarga de datos + toast. */
+  onSaved: () => Promise<void> | void;
 }
 
 export async function submitTimelineUpdate({
@@ -19,8 +19,7 @@ export async function submitTimelineUpdate({
   eventPhotos,
   eventFiles,
   createdBy,
-  onEventAdded,
-  onStatusUpdated,
+  onSaved,
 }: SubmitTimelineUpdateInput): Promise<void> {
   await addComponentEventMutation({
     component_id: componentId,
@@ -31,17 +30,6 @@ export async function submitTimelineUpdate({
     created_by: createdBy,
   });
 
-  const tempEvent: ComponentEvent = {
-    id: Date.now().toString(),
-    component_id: componentId,
-    estado: selectedStatus,
-    nota: eventNote.trim() || undefined,
-    fotos: [],
-    archivos: [],
-    created_by: createdBy,
-    created_at: new Date().toISOString(),
-  };
-
-  await onEventAdded(tempEvent);
-  await onStatusUpdated(selectedStatus);
+  // POST /:id/events ya actualiza current_status; no hace falta PATCH adicional.
+  await onSaved();
 }

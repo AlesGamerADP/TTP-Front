@@ -2,21 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Component, ComponentEvent } from '@/features/components/model';
-import { getComponentEventsQuery, getComponentQuery } from '@/features/components/queries';
 import { componentsApi } from '@/lib/api';
+import {
+  mapComponentDetailFromApi,
+  type ComponentDocumentRecord,
+} from '@/features/components/mappers';
 import { isConnectionApiError } from '@/lib/api-errors';
 import { logger } from '@/lib/logger';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
 
-export interface ComponentDocumentRecord {
-  id: string;
-  file_name?: string;
-  file_url: string;
-  document_type?: string | null;
-  uploaded_at?: string;
-  created_at?: string;
-}
+export type { ComponentDocumentRecord };
 
 export function useComponentDetailData(componentId: string) {
   const [component, setComponent] = useState<Component | undefined>(undefined);
@@ -33,33 +29,21 @@ export function useComponentDetailData(componentId: string) {
       }
 
       try {
-        const componentData = await getComponentQuery(componentId);
+        const response = await componentsApi.getById(componentId);
+        const detail = mapComponentDetailFromApi(response.data);
 
-        if (!componentData) {
-          setComponent(undefined);
-          setEvents([]);
-          setDocuments([]);
-          return;
-        }
-
-        setComponent(componentData);
+        setComponent(detail.component);
         if (!silent) {
           setIsLoading(false);
         }
 
-        const [eventsData, documentsData] = await Promise.all([
-          getComponentEventsQuery(componentId),
-          componentsApi.getDocuments(componentId),
-        ]);
-
-        const eventsArray = Array.isArray(eventsData) ? eventsData : [];
         logger.debug('Eventos cargados', {
-          total: eventsArray.length,
-          eventosConFotos: eventsArray.filter((event) => event.fotos && event.fotos.length > 0).length,
+          total: detail.events.length,
+          eventosConFotos: detail.events.filter((event) => event.fotos && event.fotos.length > 0).length,
         });
 
-        setEvents(eventsArray);
-        setDocuments(Array.isArray(documentsData.data) ? documentsData.data : []);
+        setEvents(detail.events);
+        setDocuments(detail.documents);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
 

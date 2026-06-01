@@ -34,6 +34,20 @@ type BackendComponentEventRecord = {
   created_at: string;
 };
 
+type BackendDocumentRecord = {
+  id: string;
+  file_name?: string | null;
+  file_url: string;
+  document_type?: string | null;
+  uploaded_at?: string | null;
+  created_at?: string | null;
+};
+
+export type BackendComponentDetailRecord = BackendComponentRecord & {
+  state_history?: BackendComponentEventRecord[];
+  documents?: BackendDocumentRecord[];
+};
+
 export function mapBackendComponent(record: BackendComponentRecord): Component {
   const companyId =
     record.company_id ?? record.companyId ?? record.company?.id ?? '';
@@ -80,5 +94,38 @@ export function mapBackendComponentEvent(record: BackendComponentEventRecord): C
     archivos: [],
     created_by: record.changed_by || '',
     created_at: record.changed_at || record.created_at,
+  };
+}
+
+export type ComponentDocumentRecord = {
+  id: string;
+  file_name?: string;
+  file_url: string;
+  document_type?: string | null;
+  uploaded_at?: string;
+  created_at?: string;
+};
+
+function mapBackendDocument(record: BackendDocumentRecord): ComponentDocumentRecord {
+  return {
+    id: record.id,
+    file_name: record.file_name ?? undefined,
+    file_url: record.file_url,
+    document_type: record.document_type,
+    uploaded_at: record.uploaded_at ?? undefined,
+    created_at: record.created_at ?? undefined,
+  };
+}
+
+/** Un solo GET /components/:id devuelve componente, historial y documentos. */
+export function mapComponentDetailFromApi(record: BackendComponentDetailRecord): {
+  component: Component;
+  events: ComponentEvent[];
+  documents: ComponentDocumentRecord[];
+} {
+  return {
+    component: mapBackendComponent(record),
+    events: (record.state_history ?? []).map(mapBackendComponentEvent),
+    documents: (record.documents ?? []).map(mapBackendDocument),
   };
 }

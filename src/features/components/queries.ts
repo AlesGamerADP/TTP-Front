@@ -1,7 +1,7 @@
 import { componentsApi } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import type { Component, ComponentEvent } from './model';
-import { mapBackendComponent, mapBackendComponentEvent } from './mappers';
+import { mapBackendComponent, mapComponentDetailFromApi } from './mappers';
 
 export async function getCompanyComponentsQuery(companyId: string): Promise<Component[]> {
   try {
@@ -26,8 +26,7 @@ export async function getComponentQuery(id: string): Promise<Component | undefin
 export async function getComponentEventsQuery(componentId: string): Promise<ComponentEvent[]> {
   try {
     const response = await componentsApi.getById(componentId);
-    const stateHistory = response.data.state_history || [];
-    return stateHistory.map(mapBackendComponentEvent);
+    return mapComponentDetailFromApi(response.data).events;
   } catch (error) {
     logger.error('Error fetching component events', { error, componentId });
     return [];
