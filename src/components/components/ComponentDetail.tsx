@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ComponentDetailSkeleton } from '../common/LoadingStates';
 import { Skeleton } from '../ui/skeleton';
 import { useIsMobile } from '../ui/use-mobile';
+import { cn } from '../ui/utils';
 import dynamic from 'next/dynamic';
 
 // Lazy load componentes pesados - solo se cargan cuando se necesitan
@@ -20,6 +21,18 @@ const TimelineManager = dynamic(() => import('@/features/components/views/Timeli
   loading: () => <div className="p-4 text-center text-sm text-muted-foreground">Cargando editor...</div>,
   ssr: false
 });
+
+const PdfPreviewPanel = dynamic(
+  () => import('./PdfPreviewPanel').then((m) => m.PdfPreviewPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full min-h-[12rem] items-center justify-center">
+        <p className="text-sm text-muted-foreground">Cargando visor…</p>
+      </div>
+    ),
+  },
+);
 import {
   ArrowLeft,
   Calendar,
@@ -796,19 +809,14 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
         >
           <DialogContent
             hideCloseButton
-            className="w-[calc(100vw-2rem)] sm:w-[calc(100vw-3rem)] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-w-6xl h-[90vh] sm:h-[85vh] max-h-[95vh] overflow-hidden p-0 m-1 sm:m-2 flex flex-col"
-            style={
-              isMobileViewport
-                ? {
-                    width: 'calc(100vw - 1rem)',
-                    height: '94vh',
-                    maxHeight: '96vh',
-                    margin: '0.25rem',
-                  }
-                : undefined
-            }
+            mobilePreview={isMobileViewport}
+            className={cn(
+              'preview-dialog-image flex flex-col overflow-hidden p-0',
+              !isMobileViewport &&
+                'w-[calc(100vw-2rem)] sm:w-[calc(100vw-3rem)] md:w-[90vw] lg:w-[85vw] xl:w-[80vw] max-w-6xl h-[90vh] sm:h-[85vh] max-h-[95vh] m-1 sm:m-2',
+            )}
           >
-            <DialogHeader className="flex flex-row items-start gap-3 px-4 sm:px-5 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 flex-shrink-0 border-b text-left">
+            <DialogHeader className="preview-dialog-header-zone flex flex-row items-start gap-3 px-4 sm:px-5 md:px-6 pt-4 sm:pt-5 md:pt-6 pb-3 sm:pb-4 flex-shrink-0 border-b text-left">
               <div className="min-w-0 flex-1 space-y-1">
                 <DialogTitle className="text-sm sm:text-base md:text-lg font-semibold">
                   Foto {previewIndex + 1} de {previewImages.length}
@@ -866,11 +874,11 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                       src={previewImage}
                       alt={`Foto ${previewIndex + 1}`}
                       className="max-w-full max-h-full w-auto h-auto object-contain rounded shadow-lg"
-                      style={{ 
+                      style={{
                         maxWidth: '100%',
-                        maxHeight: isMobileViewport ? 'calc(94vh - 130px)' : 'calc(90vh - 140px)',
+                        maxHeight: isMobileViewport ? '100%' : 'calc(90vh - 140px)',
                         width: 'auto',
-                        height: 'auto'
+                        height: 'auto',
                       }}
                       onError={(e) => {
                         const errorInfo: Record<string, any> = {
@@ -907,11 +915,23 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 )}
               </div>
             </div>
-            <DialogFooter className="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 pt-2 sm:pt-3 flex-shrink-0 border-t bg-background">
+            <DialogFooter
+              className={cn(
+                'preview-dialog-footer-zone flex-shrink-0 border-t bg-background',
+                isMobileViewport
+                  ? 'px-4 pt-4 pb-3'
+                  : 'px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 pt-2 sm:pt-3',
+              )}
+            >
               <Button
                 variant="outline"
-                size="sm"
-                className="h-8 sm:h-9 w-full sm:w-auto text-xs sm:text-sm"
+                size={isMobileViewport ? 'default' : 'sm'}
+                className={cn(
+                  'preview-download-button w-full sm:w-auto',
+                  isMobileViewport
+                    ? 'h-11 min-h-11 text-base font-medium px-5'
+                    : 'h-8 sm:h-9 text-xs sm:text-sm',
+                )}
                 onClick={() => {
                   const link = document.createElement('a');
                   link.href = previewImage || '';
@@ -922,9 +942,8 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   document.body.removeChild(link);
                 }}
               >
-                <Download className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Descargar Foto</span>
-                <span className="sm:hidden">Descargar</span>
+                <Download className={cn('mr-2 shrink-0', isMobileViewport ? 'h-5 w-5' : 'h-4 w-4')} />
+                {isMobileViewport ? 'Descargar' : 'Descargar foto'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -938,18 +957,14 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
         }}>
           <DialogContent
             hideCloseButton
-            className="preview-doc-dialog !flex !max-w-[min(96vw,80rem)] w-[min(calc(100vw-1.25rem),96vw)] sm:w-[min(calc(100vw-2rem),94vw)] md:w-[min(90vw,76rem)] h-[90vh] sm:h-[92vh] md:h-[95vh] max-h-[98vh] overflow-hidden p-0 m-1 sm:m-2 flex-col"
-            style={
-              isMobileViewport
-                ? {
-                    width: 'calc(100vw - 1rem)',
-                    maxWidth: 'calc(100vw - 1rem)',
-                    margin: '0.25rem',
-                  }
-                : undefined
-            }
+            mobilePreview={isMobileViewport}
+            className={cn(
+              'preview-dialog-pdf preview-doc-dialog flex flex-col overflow-hidden p-0',
+              !isMobileViewport &&
+                '!max-w-[min(96vw,80rem)] w-[min(calc(100vw-1.25rem),96vw)] sm:w-[min(calc(100vw-2rem),94vw)] md:w-[min(90vw,76rem)] h-[90vh] sm:h-[92vh] md:h-[95vh] max-h-[98vh] m-1 sm:m-2',
+            )}
           >
-            <DialogHeader className="flex flex-row items-start gap-3 px-4 sm:px-6 md:px-8 pt-4 sm:pt-5 md:pt-6 pb-3 flex-shrink-0 border-b text-left">
+            <DialogHeader className="preview-dialog-header-zone flex flex-row items-start gap-3 px-4 sm:px-6 md:px-8 pt-4 sm:pt-5 md:pt-6 pb-3 flex-shrink-0 border-b text-left">
               <div className="min-w-0 flex-1 space-y-1">
                 <DialogTitle className="text-base sm:text-lg md:text-xl font-semibold line-clamp-2">
                   {previewDocName || 'Documento'}
@@ -969,14 +984,7 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 <X className="size-5" />
               </Button>
             </DialogHeader>
-            <div
-              className="preview-doc-bg flex-1 w-full overflow-hidden"
-              style={{
-                minHeight: 0,
-                height: 'calc(95vh - 160px)',
-                flex: '1 1 auto',
-              }}
-            >
+            <div className="preview-doc-bg preview-doc-bg-pane flex-1 w-full min-h-0 overflow-hidden">
               {isLoadingPreview ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center">
@@ -985,17 +993,10 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                   </div>
                 </div>
               ) : previewDoc ? (
-                <iframe
-                  src={`${previewDoc}#navpanes=0&view=FitH`}
-                  className="w-full h-full border-0"
-                  title="Document Preview"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    minHeight: '500px',
-                    display: 'block',
-                    border: 'none',
-                  }}
+                <PdfPreviewPanel
+                  url={previewDoc}
+                  docId={previewDocId}
+                  isMobileViewport={isMobileViewport}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-muted-foreground">
@@ -1003,11 +1004,23 @@ export const ComponentDetail = memo(function ComponentDetail({ componentId, curr
                 </div>
               )}
             </div>
-            <DialogFooter className="px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-5 sm:pb-7 md:pb-8 flex-shrink-0 border-t bg-background safe-area-pb sm:justify-end">
+            <DialogFooter
+              className={cn(
+                'preview-dialog-footer-zone flex-shrink-0 border-t bg-background sm:justify-end',
+                isMobileViewport
+                  ? 'px-4 pt-4 pb-3'
+                  : 'px-4 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-5 sm:pb-7 md:pb-8',
+              )}
+            >
               <Button
-                size="sm"
+                size={isMobileViewport ? 'default' : 'sm'}
                 onClick={closeDocPreview}
-                className="h-9 w-full max-w-[10rem] sm:w-auto sm:max-w-none sm:ml-auto px-4 py-2 mb-1 sm:mb-0"
+                className={cn(
+                  'w-full sm:w-auto sm:ml-auto px-4 mb-1 sm:mb-0',
+                  isMobileViewport
+                    ? 'h-11 min-h-11 max-w-none text-base font-medium'
+                    : 'h-9 max-w-[10rem] sm:max-w-none py-2',
+                )}
               >
                 Cerrar
               </Button>

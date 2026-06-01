@@ -102,6 +102,26 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     responseHeaders.append('set-cookie', rewriteSetCookie(cookie));
   }
 
+  if (
+    request.nextUrl.searchParams.get('inline') === '1' &&
+    /\/components\/_docs\/[^/]+\/download$/i.test(`/api/${path}`)
+  ) {
+    const disposition = responseHeaders.get('content-disposition');
+    if (disposition) {
+      responseHeaders.set(
+        'content-disposition',
+        disposition.replace(/\battachment\b/i, 'inline'),
+      );
+    } else {
+      responseHeaders.set('content-disposition', 'inline');
+    }
+
+    const contentType = responseHeaders.get('content-type');
+    if (!contentType || contentType === 'application/octet-stream') {
+      responseHeaders.set('content-type', 'application/pdf');
+    }
+  }
+
   // Cuerpo ya descomprimido por fetch de Node; no reenviar Content-Encoding del backend.
   const body = await backendResponse.arrayBuffer();
 

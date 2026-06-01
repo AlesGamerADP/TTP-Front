@@ -715,6 +715,12 @@ export const componentsApi = {
     const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
     return toSameOriginApiUrl(url);
   },
+  /** URL same-origin para iframe/object en iOS (inline, no blob). Requiere ?inline=1 en el proxy. */
+  previewDocumentInline: (docId: string) => {
+    const path = `/api/components/_docs/${docId}/download?inline=1`;
+    const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+    return toSameOriginApiUrl(url);
+  },
   // Función para descargar documento usando fetch con cookies (las cookies se envían automáticamente)
   downloadDocumentWithFetch: async (docId: string, filename: string) => {
     const url = componentsApi.downloadDocument(docId);

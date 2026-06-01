@@ -164,6 +164,16 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // PDF embebido en el visor (mismo origen): DENY en /:path* bloquea iframe en iOS/Chrome móvil.
+      {
+        source: '/api/components/_docs/:docId/download',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN',
+          },
+        ],
+      },
       // Cache para assets estáticos
       {
         source: '/:all*(svg|jpg|jpeg|png|gif|ico|webp|avif|woff|woff2|ttf|eot)',
