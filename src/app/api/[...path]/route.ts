@@ -30,46 +30,60 @@ async function proxyRequest(request: NextRequest, pathSegments: string[]) {
     init.body = await request.arrayBuffer();
   }
 
-  const backendResponse = await fetch(targetUrl, init);
-  const responseHeaders = new Headers();
+  try {
+    const backendResponse = await fetch(targetUrl, init);
+    const responseHeaders = new Headers();
 
-  backendResponse.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (lower === 'set-cookie' || STRIP_RESPONSE_HEADERS.has(lower)) return;
-    responseHeaders.set(key, value);
-  });
+    backendResponse.headers.forEach((value, key) => {
+      const lower = key.toLowerCase();
+      if (lower === 'set-cookie' || STRIP_RESPONSE_HEADERS.has(lower)) return;
+      responseHeaders.set(key, value);
+    });
 
-  for (const cookie of collectSetCookies(backendResponse)) {
-    responseHeaders.append('set-cookie', rewriteSetCookie(cookie));
-  }
-
-  if (
-    request.nextUrl.searchParams.get('inline') === '1' &&
-    /\/components\/_docs\/[^/]+\/download$/i.test(`/api/${path}`)
-  ) {
-    const disposition = responseHeaders.get('content-disposition');
-    if (disposition) {
-      responseHeaders.set(
-        'content-disposition',
-        disposition.replace(/\battachment\b/i, 'inline'),
-      );
-    } else {
-      responseHeaders.set('content-disposition', 'inline');
+    for (const cookie of collectSetCookies(backendResponse)) {
+      responseHeaders.append('set-cookie', rewriteSetCookie(cookie));
     }
 
-    const contentType = responseHeaders.get('content-type');
-    if (!contentType || contentType === 'application/octet-stream') {
-      responseHeaders.set('content-type', 'application/pdf');
+    if (
+      request.nextUrl.searchParams.get('inline') === '1' &&
+      /\/components\/_docs\/[^/]+\/download$/i.test(`/api/${path}`)
+    ) {
+      const disposition = responseHeaders.get('content-disposition');
+      if (disposition) {
+        responseHeaders.set(
+          'content-disposition',
+          disposition.replace(/\battachment\b/i, 'inline'),
+        );
+      } else {
+        responseHeaders.set('content-disposition', 'inline');
+      }
+
+      const contentType = responseHeaders.get('content-type');
+      if (!contentType || contentType === 'application/octet-stream') {
+        responseHeaders.set('content-type', 'application/pdf');
+      }
     }
+
+    const body = await backendResponse.arrayBuffer();
+
+    return new NextResponse(body, {
+      status: backendResponse.status,
+      statusText: backendResponse.statusText,
+      headers: responseHeaders,
+    });
+  } catch (err: any) {
+    console.error(`Proxy error connecting to ${targetUrl}:`, err);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Proxy Error',
+        message: err.message || String(err),
+        targetUrl,
+        backendBase: BACKEND_BASE,
+      },
+      { status: 502 }
+    );
   }
-
-  const body = await backendResponse.arrayBuffer();
-
-  return new NextResponse(body, {
-    status: backendResponse.status,
-    statusText: backendResponse.statusText,
-    headers: responseHeaders,
-  });
 }
 
 type RouteContext = { params: Promise<{ path: string[] }> };
