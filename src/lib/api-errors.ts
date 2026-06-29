@@ -22,7 +22,15 @@ export function getApiErrorMeta(error: unknown): ApiErrorLike {
 export function isUnauthorizedApiError(error: unknown): boolean {
   const { status, code, message } = getApiErrorMeta(error);
   if (status === 401) return true;
-  if (code === 'TOKEN_EXPIRED' || code === 'INVALID_SIGNATURE') return true;
+  if (
+    code === 'TOKEN_EXPIRED' ||
+    code === 'INVALID_SIGNATURE' ||
+    code === 'SESSION_REVOKED' ||
+    code === 'INVALID_TOKEN' ||
+    code === 'UNAUTHORIZED'
+  ) {
+    return true;
+  }
 
   const normalized = (message || '').toLowerCase();
   return (
@@ -45,6 +53,17 @@ export function isConnectionApiError(error: unknown): boolean {
     normalized.includes('NetworkError') ||
     normalized.includes('Load failed')
   );
+}
+
+export function isForbiddenApiError(error: unknown): boolean {
+  const { status, code } = getApiErrorMeta(error);
+  if (status === 403) return true;
+  return code === 'CSRF_MISSING' || code === 'CSRF_INVALID' || code === 'FORBIDDEN';
+}
+
+export function isCsrfApiError(error: unknown): boolean {
+  const { code } = getApiErrorMeta(error);
+  return code === 'CSRF_MISSING' || code === 'CSRF_INVALID';
 }
 
 export function isTransientApiError(error: unknown): boolean {

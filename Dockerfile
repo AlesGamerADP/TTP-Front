@@ -1,10 +1,5 @@
-FROM node:20-alpine AS deps
-WORKDIR /app
-RUN apk add --no-cache libc6-compat
-COPY package*.json ./
-RUN npm ci
-
 FROM node:20-alpine AS builder
+
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_OUTPUT_MODE=standalone
@@ -17,11 +12,22 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV INTERNAL_API_URL=$INTERNAL_API_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_ENCRYPTION_KEY=$NEXT_PUBLIC_ENCRYPTION_KEY
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npm run build
+
+COPY ingetec-front/package*.json ./ingetec-front/
+COPY packages/shared/package.json ./packages/shared/package.json
+
+WORKDIR /app/ingetec-front
+RUN apk add --no-cache libc6-compat && npm ci --ignore-scripts
+
+WORKDIR /app
+COPY packages/shared ./packages/shared
+COPY ingetec-front ./ingetec-front
+
+WORKDIR /app/ingetec-front
+RUN npm run build --prefix ../packages/shared && node scripts/sync-shared-build.js && npm run build
 
 FROM node:20-alpine AS runner
+
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -30,9 +36,9 @@ ENV PORT=3000
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/ingetec-front/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/ingetec-front/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/ingetec-front/.next/static ./.next/static
 
 USER nextjs
 EXPOSE 3000

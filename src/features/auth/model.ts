@@ -1,8 +1,9 @@
-export type UserRole = 'admin' | 'user_manager' | 'client' | 'interno';
+export type UserRole = 'admin' | 'user_manager' | 'client' | 'internal' | 'interno';
 
 export interface Company {
   id: string;
   name: string;
+  ruc?: string;
   contact_email?: string;
   contact_phone?: string;
   address?: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { ComponentDetail } from '@/components/components/ComponentDetail';
+import { ComponentDetail } from '@/components/hydraulic/ComponentDetail';
 import { ComponentDetailSkeleton } from '@/components/common/LoadingStates';
 import { useAuthGate } from '@/features/auth/hooks/useAuthGate';
 

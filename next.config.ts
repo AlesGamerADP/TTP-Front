@@ -24,7 +24,7 @@ const connectSrc = [
 
 const scriptSrc = [
   "'self'",
-  "'unsafe-eval'",
+  ...(process.env.NODE_ENV === 'production' ? [] : ["'unsafe-eval'"]),
   "'unsafe-inline'",
   'https://cdnjs.cloudflare.com',
   'https://unpkg.com',
@@ -38,6 +38,12 @@ const imgSrc = [
   'https:',
   ...devLocalApiOrigins,
 ].join(' ');
+
+const backendOrigin = (
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:4000'
+).replace(/\/+$/, '');
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -117,6 +123,13 @@ const nextConfig: NextConfig = {
   // No necesita configuración adicional, pero lo definimos explícitamente
   turbopack: {
     root: path.join(__dirname),
+  },
+
+  async rewrites() {
+    return [
+      { source: '/live', destination: `${backendOrigin}/live` },
+      { source: '/ready', destination: `${backendOrigin}/ready` },
+    ];
   },
   
   // Headers de seguridad y optimización

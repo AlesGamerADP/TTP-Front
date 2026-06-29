@@ -8,8 +8,10 @@ import { OrganizationSchema, WebApplicationSchema } from '@/components/seo/Struc
 import { ResourceHints } from '@/components/seo/ResourceHints';
 import { StorageInitializer } from '@/components/common/StorageInitializer';
 import { ComponentRealtimeConnection } from '@/features/components/realtime/ComponentRealtimeConnection';
+import { RealtimeConnectionBanner } from '@/features/components/realtime/RealtimeConnectionBanner';
 import { usesBrowserApiProxy } from '@/lib/api-config';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { QueryProvider } from '@/providers/QueryProvider';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = defaultMetadata;
@@ -45,8 +47,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <ThemeMeta />
           <ErrorBoundaryWrapper>
+            <QueryProvider>
             <StorageInitializer />
             <ComponentRealtimeConnection />
+            <RealtimeConnectionBanner />
             {/* Skip to main content link for accessibility */}
             <a 
               href="#main-content" 
@@ -57,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <Toaster position="top-right" richColors />
             {process.env.NODE_ENV === 'production' && <SpeedInsights />}
+            </QueryProvider>
           </ErrorBoundaryWrapper>
         </ThemeProvider>
       </body>

@@ -63,7 +63,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       let userFriendlyMessage = 'Error al iniciar sesión.';
       let isNetwork = false;
 
-      if (errorMessage.includes('Invalid credentials') || errorMessage.includes('401')) {
+      if (errorMessage.includes('Invalid credentials') || errorMessage.includes('401') || errorMessage.includes('Credenciales inválidas') || errorMessage.includes('INVALID_CREDENTIALS')) {
         userFriendlyMessage = 'Credenciales inválidas. Verifica que estés usando el código de acceso correcto (access_code o email) y la contraseña correcta. Si el usuario fue creado sin contraseña, usa la función "Enviar Credenciales" para recibirla por email.';
       } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('No se pudo conectar')) {
         userFriendlyMessage = 'No se pudo conectar al servidor. Verifica que el backend esté corriendo.';

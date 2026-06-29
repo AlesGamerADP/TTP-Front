@@ -4,10 +4,8 @@ import { IngetecLogo } from './IngetecLogo';
 
 describe('IngetecLogo', () => {
   it('debe renderizar el logo', () => {
-    render(<IngetecLogo />);
-    // Buscar por texto alternativo o por rol
-    const logo = screen.getByRole('img', { hidden: true }) || 
-                 document.querySelector('svg');
+    const { container } = render(<IngetecLogo />);
+    const logo = container.querySelector('svg');
     expect(logo).toBeInTheDocument();
   });
 

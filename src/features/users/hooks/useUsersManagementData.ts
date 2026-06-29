@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { componentsApi, usersApi } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { queryKeys } from '@/lib/query-keys';
 import type { Company, User, UserRole } from '@/features/auth/model';
 import { mapBackendCompany } from '@/features/companies/mappers';
 import { mapBackendUser } from '@/features/users/mappers';
@@ -18,14 +19,12 @@ export function useUsersManagementData({
   filterRole,
   filterCompany,
 }: UseUsersManagementDataOptions) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.usersManagement(searchTerm, filterRole, filterCompany);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-
-    try {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey,
+    queryFn: async () => {
       const [companiesResponse, usersResponse] = await Promise.all([
         componentsApi.getCompanies(),
         usersApi.getAll(),
@@ -46,38 +45,20 @@ export function useUsersManagementData({
         return Boolean(matchesSearch && matchesRole && matchesCompany);
       });
 
-      setCompanies(mappedCompanies);
-      setUsers(filteredUsers);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isConnectionError =
-        errorMessage?.includes('No se pudo conectar') ||
-        errorMessage?.includes('Failed to fetch') ||
-        (error instanceof Error && error.name === 'TypeError');
+      return { companies: mappedCompanies, users: filteredUsers };
+    },
+    retry: 1,
+  });
 
-      if (isConnectionError) {
-        logger.debug('Error de conexión al cargar usuarios, se reintentará', {
-          error: errorMessage,
-        });
-      } else {
-        logger.error('Error loading users management data', { error });
-      }
-
-      setCompanies([]);
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterCompany, filterRole, searchTerm]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
+  const reload = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['users-management'] });
+    await refetch();
+  };
 
   return {
-    users,
-    companies,
-    loading,
+    users: data?.users ?? [],
+    companies: data?.companies ?? [],
+    loading: isLoading,
     reload,
   };
 }

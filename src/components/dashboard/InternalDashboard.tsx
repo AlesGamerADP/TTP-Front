@@ -51,6 +51,7 @@ import { resolveCompanyName } from '@/features/companies/catalog';
 import { useRoleAccess } from '@/features/auth/hooks/useRoleAccess';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
+import { loadDashboardFiltersPersistent, saveDashboardFilters } from '@/lib/dashboard-filters-storage';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 const UserManagement = dynamic(() => import('../management/UserManagement'), {
@@ -83,9 +84,10 @@ interface InternalDashboardProps {
 export function InternalDashboard({ user, onLogout, onComponentSelect, onIngressClick }: InternalDashboardProps) {
   const access = useRoleAccess(user.role);
   const canAccessComponents = user.role !== 'user_manager';
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCompany, setSelectedCompany] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const savedFilters = loadDashboardFiltersPersistent('internal');
+  const [searchTerm, setSearchTerm] = useState(savedFilters.search ?? '');
+  const [selectedCompany, setSelectedCompany] = useState(savedFilters.companyId ?? 'all');
+  const [selectedStatus, setSelectedStatus] = useState(savedFilters.status ?? 'all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const isMobileViewport = useIsMobile();
@@ -93,6 +95,15 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const toast = useToast();
+
+  useEffect(() => {
+    saveDashboardFilters('internal', {
+      search: searchTerm,
+      status: selectedStatus,
+      companyId: selectedCompany,
+    });
+  }, [searchTerm, selectedCompany, selectedStatus]);
+
   const { companies } = useCompaniesCatalog({ autoLoad: canAccessComponents });
 
   const getCompanyLabel = useCallback(
@@ -233,7 +244,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
   const prefetchComponentDetail = useCallback((componentId: string) => {
     router.prefetch(`/components/${componentId}`);
-    void import('@/components/components/ComponentDetail');
+    void import('@/components/hydraulic/ComponentDetail');
   }, [router]);
 
   const renderComponentListItem = useCallback((component: Component, options?: { showCompany?: boolean }) => {
@@ -243,11 +254,12 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
       return (
         <div
           key={component.id}
+          data-testid="component-row"
           className="rounded-xl border border-border/80 p-4 shadow-sm transition-colors hover:bg-muted/30"
         >
           <div className="space-y-3">
             <div className="space-y-1">
-              <p className="font-medium leading-tight break-words">{component.modelo}</p>
+              <p className="font-medium leading-tight break-words">{component.servicio_principal}</p>
               <div className="flex items-center text-sm text-muted-foreground">
                 <Hash className="mr-1 h-3 w-3 shrink-0" />
                 <span className="break-all">{component.serial}</span>
@@ -269,7 +281,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
               </Badge>
               <span className="flex items-center text-sm text-muted-foreground">
                 <Calendar className="mr-1 h-4 w-4 shrink-0" />
-                {new Date(component.fecha_ingreso).toLocaleDateString('es-ES')}
+                {new Date(component.fecha).toLocaleDateString('es-ES')}
               </span>
             </div>
 
@@ -291,6 +303,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
     return (
       <div
         key={component.id}
+        data-testid="component-row"
         className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
       >
         <div
@@ -302,7 +315,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
           }}
         >
           <div className="min-w-0">
-            <p className="font-medium">{component.modelo}</p>
+            <p className="font-medium">{component.servicio_principal}</p>
             <div className="flex items-center text-sm text-muted-foreground">
               <Hash className="mr-1 h-3 w-3" />
               <span className="truncate">{component.serial}</span>
@@ -328,7 +341,7 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
 
           <div className="flex items-center text-sm text-muted-foreground">
             <Calendar className="mr-1 h-4 w-4" />
-            {new Date(component.fecha_ingreso).toLocaleDateString('es-ES')}
+            {new Date(component.fecha).toLocaleDateString('es-ES')}
           </div>
 
           <div className="flex items-center justify-end">
@@ -499,8 +512,8 @@ export function InternalDashboard({ user, onLogout, onComponentSelect, onIngress
                   <Input
                     placeholder={
                       isMobileViewport
-                        ? 'Serie, modelo, ITE...'
-                        : 'Buscar por serie, modelo, ITE o número de cotización...'
+                        ? 'Serie, servicio, HE...'
+                        : 'Buscar por serie, servicio principal, HE o Nº de cotización...'
                     }
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}

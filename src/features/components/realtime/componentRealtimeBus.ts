@@ -1,12 +1,25 @@
-export type ComponentChangeAction = 'updated' | 'created' | 'deleted' | 'event_added';
+export type ComponentChangeAction =
+  | 'updated'
+  | 'created'
+  | 'deleted'
+  | 'event_added'
+  | 'event_updated'
+  | 'document_deleted'
+  | 'presence_update';
+
+export type ComponentChangeScope = 'list' | 'detail' | 'events';
 
 export interface ComponentRealtimeEvent {
-  type: 'component_change';
+  type: 'component_change' | 'presence_update';
   action: ComponentChangeAction;
   componentId: string;
   companyId: string | null;
   changedBy?: string;
   at: string;
+  eventId?: string;
+  status?: string;
+  scope?: ComponentChangeScope;
+  viewers?: { userId: string; name: string }[];
 }
 
 type Listener = (event: ComponentRealtimeEvent) => void;

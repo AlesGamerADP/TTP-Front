@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { ComponentCard } from '../components/ComponentCard';
+import { ComponentCard } from '../hydraulic/ComponentCard';
 import { PaginationControls } from '../common/PaginationControls';
 import { ComponentCardSkeleton, StatsCardSkeleton } from '../common/LoadingStates';
 import { useToast } from '../../hooks/useToast';
@@ -39,6 +39,7 @@ import { logger } from '../../lib/logger';
 import { getRoleLabel, shouldShowRoleBadge } from '../../lib/user-display';
 import { useVisibilityPolling } from '@/features/shared/hooks/useVisibilityPolling';
 import { useComponentRealtime } from '@/features/components/realtime/useComponentRealtime';
+import { loadDashboardFiltersPersistent, saveDashboardFilters } from '@/lib/dashboard-filters-storage';
 import { useCompaniesCatalog } from '@/features/companies/hooks/useCompaniesCatalog';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
@@ -50,8 +51,9 @@ interface DashboardProps {
 
 export function Dashboard({ user, onLogout, onComponentSelect }: DashboardProps) {
   const companyId = user.company_id ?? '';
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const savedFilters = loadDashboardFiltersPersistent('client');
+  const [searchTerm, setSearchTerm] = useState(savedFilters.search ?? '');
+  const [statusFilter, setStatusFilter] = useState(savedFilters.status ?? 'all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -59,6 +61,10 @@ export function Dashboard({ user, onLogout, onComponentSelect }: DashboardProps)
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const toast = useToast();
+
+  useEffect(() => {
+    saveDashboardFilters('client', { search: searchTerm, status: statusFilter });
+  }, [searchTerm, statusFilter]);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
   const { companies } = useCompaniesCatalog();
@@ -323,8 +329,8 @@ export function Dashboard({ user, onLogout, onComponentSelect }: DashboardProps)
                   <Input
                     placeholder={
                       isMobileViewport
-                        ? 'Serie, modelo, ITE...'
-                        : 'Buscar por serie, modelo, ITE o número de cotización...'
+                        ? 'Serie, servicio, HE...'
+                        : 'Buscar por serie, servicio principal, HE o Nº de cotización...'
                     }
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}

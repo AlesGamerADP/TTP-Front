@@ -44,6 +44,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
 
   const [formData, setFormData] = useState({
     name: '',
+    ruc: '',
     contact_email: '',
     contact_phone: '',
     address: '',
@@ -52,6 +53,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
   const resetForm = () => {
     setFormData({
       name: '',
+      ruc: '',
       contact_email: '',
       contact_phone: '',
       address: '',
@@ -72,6 +74,9 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
       };
 
       // Solo incluir campos opcionales si están presentes
+      if (formData.ruc) {
+        companyData.ruc = formData.ruc;
+      }
       if (formData.contact_phone) {
         companyData.contact_phone = formData.contact_phone;
       }
@@ -143,6 +148,11 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
         contact_email: formData.contact_email,
       };
 
+      if (formData.ruc) {
+        companyData.ruc = formData.ruc;
+      } else {
+        companyData.ruc = '';
+      }
       if (formData.contact_phone) {
         companyData.contact_phone = formData.contact_phone;
       }
@@ -188,6 +198,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
     setSelectedCompany(company);
     setFormData({
       name: company.name,
+      ruc: company.ruc || '',
       contact_email: company.contact_email || '',
       contact_phone: company.contact_phone || '',
       address: company.address || '',
@@ -209,7 +220,12 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
         <CardContent className="space-y-4 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">
-              <p className="font-medium leading-tight break-words">{company.name}</p>
+              <p className="font-medium leading-tight break-words">
+                {company.name}
+              </p>
+              {company.ruc && (
+                <p className="text-xs text-muted-foreground">RUC: {company.ruc}</p>
+              )}
               <p className="text-sm text-muted-foreground break-all">{company.contact_email}</p>
             </div>
             {canViewActivationStatus && (
@@ -278,6 +294,18 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="Industrias Ejemplo S.A."
+          className={emphasizedFieldClassName}
+          style={emphasizedFieldStyle}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="ruc">RUC de la Empresa</Label>
+        <Input
+          id="ruc"
+          value={formData.ruc}
+          onChange={(e) => setFormData({ ...formData, ruc: e.target.value })}
+          placeholder="Ej: 20123456789"
           className={emphasizedFieldClassName}
           style={emphasizedFieldStyle}
         />
@@ -445,7 +473,10 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
                     <ResponsiveTableRow key={company.id}>
                       <ResponsiveTableCell>
                         <div>
-                          <div>{company.name}</div>
+                          <div className="font-medium">{company.name}</div>
+                          {company.ruc && (
+                            <div className="text-xs text-muted-foreground">RUC: {company.ruc}</div>
+                          )}
                           {company.address && (
                             <div className="text-sm text-muted-foreground">{company.address}</div>
                           )}

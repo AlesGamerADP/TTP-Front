@@ -3,6 +3,7 @@ import { componentsApi } from '@/lib/api';
 
 export interface CompanyMutationPayload {
   name: string;
+  ruc?: string;
   contact_email: string;
   contact_phone?: string;
   address?: string;

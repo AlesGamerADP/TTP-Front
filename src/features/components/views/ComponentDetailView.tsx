@@ -1,1 +1,1 @@
-export { ComponentDetail as default } from '@/components/components/ComponentDetail';
+export { ComponentDetail as default } from '@/components/hydraulic/ComponentDetail';

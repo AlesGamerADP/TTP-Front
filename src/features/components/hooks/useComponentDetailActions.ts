@@ -3,6 +3,8 @@
 import { useCallback, useState } from 'react';
 import { useToast } from '@/hooks/useToast';
 import { addComponentEventMutation, deleteComponentMutation } from '@/features/components/mutations';
+import { clearTimelineDraft } from '@/lib/timeline-draft';
+import type { UploadProgress } from '@/lib/upload-with-progress';
 import type { OptimisticTimelinePayload } from './useComponentDetailData';
 import type { ComponentStatus } from '@/features/components/model';
 
@@ -34,6 +36,7 @@ export function useComponentDetailActions({
   const toast = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingTimeline, setIsSavingTimeline] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
   const submitTimelineUpdate = useCallback(
     async (input: TimelineSubmitInput): Promise<void> => {
@@ -41,6 +44,7 @@ export function useComponentDetailActions({
 
       if (hasAttachments) {
         setIsSavingTimeline(true);
+        setUploadProgress({ loaded: 0, total: 1, percent: 0 });
       }
 
       try {
@@ -62,14 +66,16 @@ export function useComponentDetailActions({
           fotos: input.eventPhotos.length > 0 ? input.eventPhotos : undefined,
           archivos: input.eventFiles.length > 0 ? input.eventFiles : undefined,
           created_by: input.createdBy,
+          onUploadProgress: hasAttachments ? setUploadProgress : undefined,
         });
 
+        await clearTimelineDraft(componentId);
         await reload(true);
 
         toast.success(
           'Evento registrado',
           hasAttachments
-            ? 'Estado, fotos y documentos ya están en el servidor.'
+            ? 'Estado visible de inmediato; archivos sincronizados.'
             : 'El cambio ya es visible para todos los usuarios.',
         );
       } catch (error) {
@@ -84,6 +90,7 @@ export function useComponentDetailActions({
       } finally {
         if (hasAttachments) {
           setIsSavingTimeline(false);
+          setUploadProgress(null);
         }
       }
     },
@@ -120,6 +127,7 @@ export function useComponentDetailActions({
     handleDelete,
     submitTimelineUpdate,
     isSavingTimeline,
+    uploadProgress,
     isDeleting,
   };
 }

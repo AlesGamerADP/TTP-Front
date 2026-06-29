@@ -20,6 +20,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "public/**/*.js",
     "public/**/*.min.js",
+    "public/**/*.mjs",
+    "public/**/*.min.mjs",
+    "scripts/**",
   ]),
 ]);
 

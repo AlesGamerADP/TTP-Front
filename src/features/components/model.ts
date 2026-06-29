@@ -15,12 +15,17 @@ export interface Component {
   /** Nombre embebido desde la API cuando viene en `company.name` */
   company_name?: string;
   serial: string;
-  modelo: string;
-  fecha_ingreso: string;
+  servicio_principal: string;
+  fecha: string;
   estado: ComponentStatus;
-  observaciones?: string;
-  ite?: string;
-  numero_cotizacion?: string;
+  solicitud_general?: string;
+  hoja_evaluacion_he?: string;
+  id_cotizacion?: string;
+  atencion_persona?: string;
+  item_nro?: number;
+  cantidad?: number;
+  nro_actividad?: string;
+  descripcion_actividad?: string;
   created_at: string;
   created_by?: string;
 }

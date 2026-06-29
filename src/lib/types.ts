@@ -1,3 +1,4 @@
+/** @deprecated Usar tipos de `@/features/auth/model` y `@/features/components/model`. */
 // Tipos reconciliados: el dominio runtime vive en `auth.ts`.
 // Este archivo queda para DTOs y compatibilidad de imports históricos.
 export type {
@@ -11,21 +12,25 @@ import type { Company, ComponentStatus, User } from './auth';
 
 export interface HydraulicComponent {
   id: string;
-  company_id: string; // COMPONENTE ASOCIADO A EMPRESA, NO A USUARIO
+  company_id: string;
   company?: Company;
-  component_type: string; // Tipo de componente (bomba, válvula, cilindro, etc.)
   serial_number: string;
-  model?: string;
-  brand?: string;
-  quotation_number?: string; // NÚMERO DE COTIZACIÓN asignado al ingreso (ej: "COT-2024-001")
+  id_cotizacion?: string;
+  fecha: string;
+  hoja_evaluacion_he?: string;
+  solicitud_general?: string;
+  atencion_persona?: string;
+  item_nro?: number;
+  servicio_principal: string;
+  cantidad?: number;
+  nro_actividad?: string;
+  descripcion_actividad?: string;
   current_status: ComponentStatus;
-  ingress_date: string;
   estimated_completion?: string;
   actual_completion?: string;
-  description?: string;
   created_at: string;
   updated_at: string;
-  created_by: string; // Usuario interno que creó el ingreso
+  created_by: string;
 }
 
 export interface ComponentStateHistory {

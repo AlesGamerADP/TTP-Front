@@ -1,1 +1,1 @@
-export { ComponentIngress as default } from '@/components/components/ComponentIngress';
+export { ComponentIngress as default } from '@/components/hydraulic/ComponentIngress';

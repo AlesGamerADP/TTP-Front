@@ -4,12 +4,14 @@ const ROLE_LABELS: Record<User['role'], string> = {
   admin: 'Administrador',
   user_manager: 'Gestor',
   client: 'Cliente',
+  internal: 'Interno',
   interno: 'Interno',
 };
 
 const ROLE_CODIGO_HINTS: Record<User['role'], string[]> = {
   admin: ['ADMIN', 'ADMINISTRADOR'],
   user_manager: ['MANAGER', 'GESTOR'],
+  internal: ['INTERNO'],
   interno: ['INTERNO'],
   client: ['CLIENT', 'CLIENTE'],
 };

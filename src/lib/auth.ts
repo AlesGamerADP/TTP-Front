@@ -19,7 +19,6 @@ export {
   addComponentEventMutation as addComponentEvent,
   createComponentMutation as addNewComponent,
   deleteComponentMutation as deleteComponent,
-  updateComponentStatusMutation as updateComponentStatus,
 } from '@/features/components/mutations';
 export {
   getCompanyComponentsQuery as getCompanyComponents,

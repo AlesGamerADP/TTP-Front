@@ -18,8 +18,8 @@ export interface PaginationParams {
   companyId?: string;
   status?: ComponentStatus;
   serialNumber?: string;
-  ite?: string;
-  quotationNumber?: string;
+  hojaEvaluacionHe?: string;
+  idCotizacion?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -61,8 +61,8 @@ export async function getComponentsPaginated(
       companyId: params.companyId && params.companyId !== 'all' ? params.companyId : undefined,
       status: params.status && (params.status as string) !== 'all' ? params.status : undefined,
       serialNumber: params.serialNumber,
-      ite: params.ite,
-      quotationNumber: params.quotationNumber,
+      hojaEvaluacionHe: params.hojaEvaluacionHe,
+      idCotizacion: params.idCotizacion,
     });
 
     const mappedData = response.data.map(mapBackendComponent);

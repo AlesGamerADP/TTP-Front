@@ -10,6 +10,7 @@ import {
   type ComponentRealtimeEvent,
 } from './componentRealtimeBus';
 import { getComponentStreamUrl } from './componentStreamUrl';
+import { setRealtimeReconnecting } from './realtimeConnectionBus';
 
 const MIN_RECONNECT_MS = 2_000;
 const MAX_RECONNECT_MS = 60_000;
@@ -18,9 +19,11 @@ const MAX_AUTH_FAILURES = 3;
 function parseRealtimeEvent(raw: string): ComponentRealtimeEvent | null {
   try {
     const data = JSON.parse(raw) as ComponentRealtimeEvent;
-    if (data?.type !== 'component_change' || !data.componentId) {
-      return null;
+    if (!data?.componentId) return null;
+    if (data.type === 'presence_update' || data.action === 'presence_update') {
+      return { ...data, type: 'presence_update', action: 'presence_update' };
     }
+    if (data.type !== 'component_change') return null;
     return data;
   } catch {
     return null;
@@ -31,7 +34,10 @@ export function ComponentRealtimeConnection() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setUser = useAuthStore((state) => state.setUser);
   const userIdRef = useRef<string | undefined>(undefined);
-  userIdRef.current = useAuthStore((state) => state.user?.id);
+  const userId = useAuthStore((state) => state.user?.id);
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   const [sessionChecked, setSessionChecked] = useState(false);
   const [hasSession, setHasSession] = useState(false);
@@ -110,12 +116,18 @@ export function ComponentRealtimeConnection() {
       source.addEventListener('open', () => {
         backoffRef.current = MIN_RECONNECT_MS;
         authFailuresRef.current = 0;
+        setRealtimeReconnecting(false);
         logger.debug('SSE componentes conectado');
       });
 
       source.onmessage = (message) => {
         const event = parseRealtimeEvent(message.data);
         if (!event) return;
+
+        if (event.type === 'presence_update') {
+          publishComponentRealtime(event);
+          return;
+        }
 
         const userId = userIdRef.current;
         if (event.changedBy && userId && event.changedBy === userId) {
@@ -127,6 +139,7 @@ export function ComponentRealtimeConnection() {
       };
 
       source.onerror = () => {
+        setRealtimeReconnecting(true);
         source.close();
         if (sourceRef.current === source) {
           sourceRef.current = null;

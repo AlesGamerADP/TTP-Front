@@ -10,7 +10,7 @@ describe('Badge', () => {
 
   it('debe aplicar variantes correctamente', () => {
     const { container } = render(<Badge variant="destructive">Error</Badge>);
-    const badge = container.querySelector('div');
+    const badge = container.querySelector('span');
     expect(badge).toHaveClass('bg-destructive');
   });
 

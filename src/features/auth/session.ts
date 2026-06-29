@@ -1,4 +1,6 @@
 import { authApi, usersApi } from '@/lib/api';
+import { usesBrowserApiProxy } from '@/lib/api-config';
+import { setAccessToken } from '@/lib/auth-token';
 import { logger } from '@/lib/logger';
 import { normalizeUserRole } from '@/lib/roles';
 import type { User } from './model';
@@ -41,6 +43,9 @@ function mapBackendUser(backendUser: BackendUserRecord): User {
 export async function loginSession(codigo: string, password: string): Promise<User | null> {
   try {
     const response = await authApi.login(codigo, password);
+    if (!usesBrowserApiProxy() && response.accessToken) {
+      setAccessToken(response.accessToken);
+    }
     const user = mapBackendUser(response.user as BackendUserRecord);
 
     logger.info('Login attempt successful', { codigo, userId: user.id, role: user.role });
@@ -73,7 +78,7 @@ export async function logoutSession(): Promise<void> {
   try {
     await authApi.logout();
   } catch (error) {
-    logger.error('Error during logout API call', { error, userId });
+    logger.warn('Error during logout API call', { error, userId });
   }
 
   const { clearAllStorage, cookieStorage } = await import('@/lib/storage');

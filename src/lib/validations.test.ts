@@ -148,7 +148,7 @@ describe('sanitizeString', () => {
   });
 
   it('debe eliminar caracteres < y >', () => {
-    expect(sanitizeString('test<script>alert("xss")</script>')).toBe('testscriptalert("xss")script');
+    expect(sanitizeString('test<script>alert("xss")</script>')).toBe('testscriptalert("xss")/script');
   });
 
   it('debe eliminar javascript:', () => {
@@ -180,7 +180,7 @@ describe('sanitizeObject', () => {
     };
     const result = sanitizeObject(input);
     expect(result.user.name).toBe('test');
-    expect(result.user.bio).toBe('scriptalert("xss")script');
+    expect(result.user.bio).toBe('scriptalert("xss")/script');
   });
 
   it('debe preservar valores no string', () => {

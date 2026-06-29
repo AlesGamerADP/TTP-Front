@@ -11,14 +11,19 @@ type BackendComponentRecord = {
   companyId?: string | null;
   company_name?: string | null;
   companyName?: string | null;
-  company?: BackendCompanyRef | null;
+  company?: BackendCompanyRef & { ruc?: string | null } | null;
   serial_number: string;
-  model?: string | null;
-  ingress_date: string;
+  servicio_principal?: string | null;
+  fecha: string;
   current_status: string;
-  description?: string | null;
-  ite?: string | null;
-  quotation_number?: string | null;
+  solicitud_general?: string | null;
+  hoja_evaluacion_he?: string | null;
+  id_cotizacion?: string | null;
+  atencion_persona?: string | null;
+  item_nro?: number | null;
+  cantidad?: number | null;
+  nro_actividad?: string | null;
+  descripcion_actividad?: string | null;
   created_at: string;
   created_by?: string | null;
 };
@@ -61,12 +66,17 @@ export function mapBackendComponent(record: BackendComponentRecord): Component {
       record.companyName?.trim() ||
       undefined,
     serial: record.serial_number,
-    modelo: record.model || '',
-    fecha_ingreso: record.ingress_date,
+    servicio_principal: record.servicio_principal || '',
+    fecha: record.fecha,
     estado: record.current_status as ComponentStatus,
-    observaciones: record.description || undefined,
-    ite: record.ite || undefined,
-    numero_cotizacion: record.quotation_number || undefined,
+    solicitud_general: record.solicitud_general || undefined,
+    hoja_evaluacion_he: record.hoja_evaluacion_he || undefined,
+    id_cotizacion: record.id_cotizacion || undefined,
+    atencion_persona: record.atencion_persona || undefined,
+    item_nro: record.item_nro || undefined,
+    cantidad: record.cantidad || undefined,
+    nro_actividad: record.nro_actividad || undefined,
+    descripcion_actividad: record.descripcion_actividad || undefined,
     created_at: record.created_at,
     created_by: record.created_by || undefined,
   };

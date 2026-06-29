@@ -1,4 +1,4 @@
-﻿.management-card-header {
+.management-card-header {
   column-gap: 1.5rem;
   row-gap: 0.5rem;
   padding-bottom: 1.5rem;
@@ -784,4 +784,13 @@ button.header-action-button--danger:active:not(:disabled) {
 .test-credentials-warning {
   background: color-mix(in oklab, var(--color-amber-50) 80%, var(--card));
   border-color: color-mix(in oklab, #fdc800 60%, var(--border));
+}
+
+.dark .test-credentials-warning {
+  background: color-mix(in oklab, #fdc800 8%, var(--card));
+  border-color: color-mix(in oklab, #fdc800 25%, var(--border));
+}
+
+.dark .test-credentials-warning .brand-accent-text {
+  color: color-mix(in oklab, #fdc800 85%, var(--foreground)) !important;
 }

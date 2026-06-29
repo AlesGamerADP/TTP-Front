@@ -29,6 +29,7 @@ import { useToast } from '../../hooks/useToast';
 import { useDebounce } from '../../hooks/useDebounce';
 import { createUserSchema, passwordSchema } from '../../lib/validations';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ManagementPageLayout } from './ManagementPageLayout';
 import { ResponsiveTable, ResponsiveTableHeader, ResponsiveTableBody, ResponsiveTableRow, ResponsiveTableCell, ResponsiveTableHead } from '../common/ResponsiveTable';
 import { useIsMobile } from '../ui/use-mobile';
 import { toApiUserRole } from '../../lib/roles';
@@ -306,7 +307,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     
     // User manager puede gestionar SOLO clientes e internos, NO admins ni otros managers
     if (currentUser.role === 'user_manager') {
-      return user.role === 'client' || user.role === 'interno';
+      return user.role === 'client' || user.role === 'internal' || user.role === 'interno';
     }
     
     return false;
@@ -614,121 +615,61 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
   const mobileDialogContentClassName =
     'max-w-[calc(100vw-1rem)] p-4 pt-6 max-h-[85vh] overflow-y-auto';
 
+  const createUserButton = (
+    <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="management-create-button shrink-0">
+      <UserPlus className="h-4 w-4 mr-2" />
+      Crear Usuario
+    </Button>
+  );
+
+  const filterControls = (
+    <>
+      <div className="relative md:col-span-2">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nombre o email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      <Select value={filterRole} onValueChange={(value: UserRole | 'all') => setFilterRole(value)}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todos los roles</SelectItem>
+          <SelectItem value="admin">Administradores</SelectItem>
+          <SelectItem value="user_manager">Gestores</SelectItem>
+          <SelectItem value="internal">Internos</SelectItem>
+          <SelectItem value="client">Clientes</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select value={filterCompany} onValueChange={setFilterCompany}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas las empresas</SelectItem>
+          {companies.map((company) => (
+            <SelectItem key={company.id} value={company.id}>
+              {company.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader className="management-card-header">
-          <CardTitle className="flex items-center gap-2 text-lg leading-tight sm:text-xl">
-            <Shield className="h-6 w-6" />
-            Gestión de Usuarios
-          </CardTitle>
-          <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
-            Crear y administrar usuarios con acceso al sistema
-          </CardDescription>
-          {isMobileViewport ? (
-            <>
-              <div className="management-create-button-wrap">
-                <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="management-create-button w-auto">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Crear Usuario
-                </Button>
-              </div>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogContent className={mobileDialogContentClassName}>
-                  <DialogHeader>
-                    <DialogTitle>Crear Nuevo Usuario</DialogTitle>
-                    <DialogDescription>
-                      Complete los datos del nuevo usuario del sistema
-                    </DialogDescription>
-                  </DialogHeader>
-                  {renderCreateUserFields()}
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={handleCreateUser} className="management-primary-button">Crear Usuario</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </>
-          ) : (
-            <>
-              <CardAction className="management-card-action">
-                <Button onClick={() => { resetForm(); setIsCreateDialogOpen(true); }} className="management-create-button shrink-0">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Crear Usuario
-                </Button>
-              </CardAction>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Crear Nuevo Usuario</DialogTitle>
-                    <DialogDescription>
-                      Complete los datos del nuevo usuario del sistema
-                    </DialogDescription>
-                  </DialogHeader>
-                  {renderCreateUserFields()}
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={handleCreateUser} className="management-primary-button">Crear Usuario</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-        </CardHeader>
-      </Card>
-
-      {/* Filtros */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre o email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            <Select value={filterRole} onValueChange={(value: UserRole | 'all') => setFilterRole(value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los roles</SelectItem>
-                <SelectItem value="admin">Administradores</SelectItem>
-                <SelectItem value="user_manager">Gestores</SelectItem>
-                <SelectItem value="interno">Internos</SelectItem>
-                <SelectItem value="client">Clientes</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filterCompany} onValueChange={setFilterCompany}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las empresas</SelectItem>
-                {companies.map((company) => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Tabla de Usuarios */}
-      <Card>
-        <CardContent className="p-6">
+      <ManagementPageLayout
+        title="Gestión de Usuarios"
+        description="Crear y administrar usuarios con acceso al sistema"
+        icon={<Shield className="h-6 w-6 text-primary" />}
+        actions={createUserButton}
+        filters={filterControls}
+      >
           {loading ? (
             <div
               className="flex min-h-[420px] items-center justify-center rounded-md border border-dashed border-muted-foreground/25 bg-muted/30 px-4 text-center text-muted-foreground"
@@ -833,8 +774,25 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
             </ResponsiveTable>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </ManagementPageLayout>
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className={isMobileViewport ? mobileDialogContentClassName : 'max-w-md'}>
+          <DialogHeader>
+            <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+            <DialogDescription>Complete los datos del nuevo usuario del sistema</DialogDescription>
+          </DialogHeader>
+          {renderCreateUserFields()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateUser} className="management-primary-button">
+              Crear Usuario
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       {isMobileViewport ? (

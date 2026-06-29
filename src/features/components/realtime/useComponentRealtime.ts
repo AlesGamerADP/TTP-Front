@@ -19,7 +19,9 @@ export function useComponentRealtime({
   onEvent,
 }: UseComponentRealtimeOptions): void {
   const onEventRef = useRef(onEvent);
-  onEventRef.current = onEvent;
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
   useEffect(() => {
     if (!enabled) return;
