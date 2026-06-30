@@ -27,7 +27,7 @@ import { generateReadablePassword } from '../../lib/generate-password';
 import { cn } from '../ui/utils';
 import { useToast } from '../../hooks/useToast';
 import { useDebounce } from '../../hooks/useDebounce';
-import { createUserSchema, passwordSchema } from '../../lib/validations';
+import { createUserSchema, passwordSchema, updateUserSchema } from '../../lib/validations';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ManagementPageLayout } from './ManagementPageLayout';
 import { ResponsiveTable, ResponsiveTableHeader, ResponsiveTableBody, ResponsiveTableRow, ResponsiveTableCell, ResponsiveTableHead } from '../common/ResponsiveTable';
@@ -163,16 +163,22 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
     if (!selectedUser) return;
 
     try {
-      // Validaciones
-      if (!formData.email || !formData.full_name) {
-        toast.error('Por favor complete todos los campos obligatorios');
+      const validation = updateUserSchema.safeParse({
+        email: formData.email.trim(),
+        full_name: formData.full_name.trim(),
+        company_id: normalizeOptionalString(formData.company_id) || null,
+        access_code: formData.access_code.trim(),
+      });
+
+      if (!validation.success) {
+        toast.error(validation.error.issues[0]?.message || 'Datos inválidos para actualizar usuario');
         return;
       }
 
       // Preparar datos para el backend
       const updateData: UpdateUserInput = {
-        email: formData.email.trim(),
-        full_name: formData.full_name.trim(),
+        email: validation.data.email,
+        full_name: validation.data.full_name,
       };
 
       // Solo incluir role si el usuario tiene permisos para cambiarlo
@@ -181,13 +187,13 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
       }
 
       // Solo incluir company_id si está presente y no está vacío
-      if (normalizeOptionalString(formData.company_id)) {
-        updateData.company_id = formData.company_id.trim();
+      if (validation.data.company_id) {
+        updateData.company_id = validation.data.company_id;
       }
 
       // Solo incluir access_code si está presente y no está vacío
-      if (normalizeOptionalString(formData.access_code)) {
-        updateData.access_code = formData.access_code.trim();
+      if (validation.data.access_code) {
+        updateData.access_code = validation.data.access_code;
       }
 
       // Llamar al API para actualizar el usuario
@@ -401,7 +407,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
         <Input
           id="full_name"
           value={formData.full_name}
-          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, full_name: e.target.value.replace(/[^a-zA-Z\sáéíóúÁÉÍÓÚñÑ\.\-]/g, '') })}
           placeholder="Juan Pérez"
           className={emphasizedFieldClassName}
           style={emphasizedFieldStyle}
@@ -485,7 +491,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
         <Input
           id="edit_full_name"
           value={formData.full_name}
-          onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, full_name: e.target.value.replace(/[^a-zA-Z\sáéíóúÁÉÍÓÚñÑ\.\-]/g, '') })}
           className={emphasizedFieldClassName}
           style={emphasizedFieldStyle}
         />
@@ -555,7 +561,7 @@ export default function UserManagement({ currentUser }: UserManagementProps) {
             <Input
               id="edit_access_code"
               value={formData.access_code}
-              onChange={(e) => setFormData({ ...formData, access_code: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, access_code: e.target.value.replace(/[^a-zA-Z0-9]/g, '') })}
               placeholder="Ej: EJ001"
               className={emphasizedFieldClassName}
               style={emphasizedFieldStyle}

@@ -17,20 +17,53 @@ export const loginSchema = z.object({
 // Schema de validación para crear usuario
 export const createUserSchema = z.object({
   email: z.string().email('Email inválido'),
-  full_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
+  full_name: z
+    .string()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(100)
+    .regex(/^[a-zA-Z\sáéíóúÁÉÍÓÚñÑ\.\-]+$/, 'El nombre contiene caracteres no permitidos (solo letras y espacios)'),
   password: passwordSchema.optional(),
   role: z.enum(API_USER_ROLES),
   company_id: z.string().uuid().optional().nullable(),
-  access_code: z.string().optional(),
+  access_code: z
+    .string()
+    .regex(/^[a-zA-Z0-9]*$/, 'El código de acceso debe ser alfanumérico')
+    .optional()
+    .or(z.literal('')),
   auth_user_id: z.string().optional(),
+});
+
+export const updateUserSchema = z.object({
+  email: z.string().email('Email inválido'),
+  full_name: z
+    .string()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(100)
+    .regex(/^[a-zA-Z\sáéíóúÁÉÍÓÚñÑ\.\-]+$/, 'El nombre contiene caracteres no permitidos (solo letras y espacios)'),
+  company_id: z.string().uuid().optional().nullable(),
+  access_code: z
+    .string()
+    .regex(/^[a-zA-Z0-9]*$/, 'El código de acceso debe ser alfanumérico')
+    .optional()
+    .or(z.literal('')),
 });
 
 // Schema de validación para crear empresa
 export const createCompanySchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
   contact_email: z.string().email('Email inválido'),
-  contact_phone: z.string().optional(),
+  contact_phone: z
+    .string()
+    .regex(/^[\d\s\-\+\(\)]*$/, 'El teléfono contiene caracteres inválidos')
+    .optional()
+    .or(z.literal('')),
   address: z.string().optional(),
+  ruc: z
+    .string()
+    .length(11, 'El RUC debe tener exactamente 11 dígitos')
+    .regex(/^\d+$/, 'El RUC debe contener solo números')
+    .optional()
+    .or(z.literal('')),
 });
 
 // Schema de validación para crear componente

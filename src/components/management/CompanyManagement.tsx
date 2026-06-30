@@ -27,6 +27,7 @@ import {
   updateCompanyMutation,
   type CompanyMutationPayload,
 } from '@/features/companies/mutations';
+import { createCompanySchema } from '../../lib/validations';
 
 interface CompanyManagementProps {
   currentUser: User;
@@ -62,26 +63,32 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
 
   const handleCreateCompany = async () => {
     try {
-      if (!formData.name || !formData.contact_email) {
-        toast.error('Nombre y email de contacto son obligatorios');
+      const validation = createCompanySchema.safeParse({
+        name: formData.name.trim(),
+        contact_email: formData.contact_email.trim(),
+        contact_phone: formData.contact_phone,
+        address: formData.address,
+        ruc: formData.ruc,
+      });
+
+      if (!validation.success) {
+        toast.error(validation.error.issues[0]?.message || 'Datos inválidos para crear la empresa');
         return;
       }
 
-      // Preparar datos para el backend
       const companyData: CompanyMutationPayload = {
-        name: formData.name,
-        contact_email: formData.contact_email,
+        name: validation.data.name,
+        contact_email: validation.data.contact_email,
       };
 
-      // Solo incluir campos opcionales si están presentes
-      if (formData.ruc) {
-        companyData.ruc = formData.ruc;
+      if (validation.data.ruc) {
+        companyData.ruc = validation.data.ruc;
       }
-      if (formData.contact_phone) {
-        companyData.contact_phone = formData.contact_phone;
+      if (validation.data.contact_phone) {
+        companyData.contact_phone = validation.data.contact_phone;
       }
-      if (formData.address) {
-        companyData.address = formData.address;
+      if (validation.data.address) {
+        companyData.address = validation.data.address;
       }
       
       // Llamar al API para crear la empresa
@@ -138,26 +145,30 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
     if (!selectedCompany) return;
 
     try {
-      if (!formData.name || !formData.contact_email) {
-        toast.error('Nombre y email de contacto son obligatorios');
+      const validation = createCompanySchema.safeParse({
+        name: formData.name.trim(),
+        contact_email: formData.contact_email.trim(),
+        contact_phone: formData.contact_phone,
+        address: formData.address,
+        ruc: formData.ruc,
+      });
+
+      if (!validation.success) {
+        toast.error(validation.error.issues[0]?.message || 'Datos inválidos para actualizar la empresa');
         return;
       }
 
       const companyData: CompanyMutationPayload = {
-        name: formData.name,
-        contact_email: formData.contact_email,
+        name: validation.data.name,
+        contact_email: validation.data.contact_email,
+        ruc: validation.data.ruc || '',
       };
 
-      if (formData.ruc) {
-        companyData.ruc = formData.ruc;
-      } else {
-        companyData.ruc = '';
+      if (validation.data.contact_phone) {
+        companyData.contact_phone = validation.data.contact_phone;
       }
-      if (formData.contact_phone) {
-        companyData.contact_phone = formData.contact_phone;
-      }
-      if (formData.address) {
-        companyData.address = formData.address;
+      if (validation.data.address) {
+        companyData.address = validation.data.address;
       }
 
       await updateCompanyMutation(selectedCompany.id, companyData);
@@ -304,7 +315,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
         <Input
           id="ruc"
           value={formData.ruc}
-          onChange={(e) => setFormData({ ...formData, ruc: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, ruc: e.target.value.replace(/\D/g, '').slice(0, 11) })}
           placeholder="Ej: 20123456789"
           className={emphasizedFieldClassName}
           style={emphasizedFieldStyle}
@@ -329,7 +340,7 @@ export default function CompanyManagement({ currentUser }: CompanyManagementProp
         <Input
           id="contact_phone"
           value={formData.contact_phone}
-          onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value.replace(/[^\d\s\-\+\(\)]/g, '') })}
           placeholder="+51912345678"
           className={emphasizedFieldClassName}
           style={emphasizedFieldStyle}
