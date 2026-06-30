@@ -6,6 +6,8 @@ const outputMode = (process.env.NEXT_OUTPUT_MODE || '').trim();
 const vercelInsightsOrigins = [
   'https://va.vercel-scripts.com',
   'https://vitals.vercel-insights.com',
+  'https://vercel.live',
+  'https://*.vercel.com',
 ];
 
 const devLocalApiOrigins =
@@ -148,7 +150,7 @@ const nextConfig: NextConfig = {
               "font-src 'self' data:",
               "worker-src 'self' blob: https://cdnjs.cloudflare.com https://unpkg.com",
               `connect-src ${connectSrc}`,
-              "frame-src 'self' blob:",
+              "frame-src 'self' blob: https://vercel.live https://*.vercel.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
