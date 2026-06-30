@@ -14,17 +14,16 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_ENCRYPTION_KEY=$NEXT_PUBLIC_ENCRYPTION_KEY
 
 COPY ingetec-front/package*.json ./ingetec-front/
-COPY packages/shared/package.json ./packages/shared/package.json
+COPY ingetec-front/packages/shared/package.json ./ingetec-front/packages/shared/package.json
 
 WORKDIR /app/ingetec-front
 RUN apk add --no-cache libc6-compat && npm ci --ignore-scripts
 
 WORKDIR /app
-COPY packages/shared ./packages/shared
 COPY ingetec-front ./ingetec-front
 
 WORKDIR /app/ingetec-front
-RUN npm run build --prefix ../packages/shared && node scripts/sync-shared-build.js && npm run build
+RUN npm run build --prefix ./packages/shared && node scripts/sync-shared-build.js && npm run build
 
 FROM node:20-alpine AS runner
 

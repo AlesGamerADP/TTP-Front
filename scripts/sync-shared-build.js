@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const sourceDir = path.resolve(__dirname, '../../packages/shared/dist');
+const sourceDir = path.resolve(__dirname, '../packages/shared/dist');
 const targetDir = path.resolve(__dirname, '../node_modules/@ingetec/shared/dist');
 
 if (!fs.existsSync(sourceDir)) {
