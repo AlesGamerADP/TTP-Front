@@ -694,6 +694,44 @@ button.header-action-button--danger:active:not(:disabled) {
   background: var(--app-page-bg);
 }
 
+/* Ocultar barra de scroll visualmente en el login */
+.hide-scrollbar {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE y Edge */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera */
+}
+
+/* Optimización para pantallas con poca altura vertical */
+@media (max-height: 850px) {
+  .login-shell .text-center {
+    margin-bottom: 0.25rem !important;
+  }
+  .login-shell img {
+    width: 340px !important;
+    margin-bottom: 0.25rem !important;
+  }
+  .login-shell h1 {
+    font-size: 1.25rem !important;
+    margin-bottom: 0.125rem !important;
+  }
+  .login-shell p {
+    font-size: 0.75rem !important;
+  }
+  /* Reducir espaciados del contenedor */
+  .login-shell .space-y-4 {
+    margin-top: 0.25rem !important;
+  }
+  .login-shell .space-y-4 > * + * {
+    margin-top: 0.5rem !important;
+  }
+  .login-shell [data-slot="card"] {
+    margin-top: 0.5rem !important;
+  }
+}
+
+
 .login-form-control {
   height: 2.75rem;
   border-radius: 0.375rem;

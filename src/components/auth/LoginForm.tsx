@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -28,6 +28,31 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const [passwordFieldFocus, setPasswordFieldFocus] = useState(false);
 
   const showPasswordToggle = passwordFieldHover || passwordFieldFocus;
+
+  const [showTestCredentials, setShowTestCredentials] = useState(false);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+
+    // Mostrar credenciales de prueba en localhost, desarrollo o mediante parámetro ?test=1
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const hasTestParam = window.location.search.includes('test=1') || window.location.search.includes('demo=1');
+      setShowTestCredentials(process.env.NODE_ENV === 'development' || isLocal || hasTestParam);
+    }
+    
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
 
   const performLogin = async () => {
     setError('');
@@ -88,11 +113,12 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   };
 
   return (
-    <div className="login-shell relative min-h-screen flex items-start justify-center px-3 py-8 sm:py-12 md:py-16">
-      <div className="absolute right-3 top-3 sm:right-4 sm:top-4">
+    <div className="login-shell relative h-screen w-screen overflow-y-auto select-none hide-scrollbar">
+      <div className="absolute right-3 top-3 sm:right-4 sm:top-4 z-50">
         <ThemeToggle />
       </div>
-      <div className="w-full max-w-full sm:max-w-md space-y-4 sm:space-y-6 md:space-y-8">
+      <div className="flex flex-col items-center justify-center min-h-full w-full px-3 py-6 sm:py-10 md:py-12">
+        <div className="w-full max-w-full sm:max-w-md space-y-4 sm:space-y-6 md:space-y-8 flex flex-col justify-center">
         <div className="text-center">
           <div className="flex items-center justify-center mb-4 sm:mb-6 md:mb-8">
             <Image
@@ -100,7 +126,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
               alt="INGETEC HYDRAULIC SYSTEMS"
               width={400}
               height={133}
-              className="h-auto w-[260px] sm:w-[320px] md:w-[400px]"
+              className="h-auto w-[300px] sm:w-[360px] md:w-[450px]"
               priority
             />
           </div>
@@ -111,7 +137,7 @@ export function LoginForm({ onLogin }: LoginFormProps) {
         </div>
 
         <Card className="w-full max-w-md mx-auto shadow-lg border">
-          <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4  ">
+          <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-4">
             <CardTitle className="brand-accent-text flex w-full items-center justify-center gap-2 text-lg sm:text-xl">
               <Lock className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />
               Acceso al sistema
@@ -231,12 +257,13 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           </CardContent>
         </Card>
 
-        {process.env.NODE_ENV === 'development' && (
+        {showTestCredentials && (
           <div className="w-full max-w-md mx-auto">
             <TestCredentials />
           </div>
         )}
       </div>
     </div>
+  </div>
   );
 }

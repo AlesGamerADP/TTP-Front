@@ -17,7 +17,7 @@ interface Credential {
 
 export default function TestCredentials() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   const credentials: Credential[] = [
     {
